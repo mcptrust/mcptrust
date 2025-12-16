@@ -54,10 +54,10 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 
 # ============================================================================
-# Portability Helpers
+# Portability
 # ============================================================================
 
-# hash_file: Compute SHA256 hash of a file (portable)
+# sha256 hash (portable)
 hash_file() {
     local file="$1"
     if command -v sha256sum &>/dev/null; then
@@ -67,7 +67,7 @@ hash_file() {
     fi
 }
 
-# inplace_sed: In-place sed edit (portable)
+# in-place sed (portable)
 inplace_sed() {
     if [[ "$(uname)" == "Darwin" ]]; then
         sed -i '' "$@"
@@ -76,8 +76,7 @@ inplace_sed() {
     fi
 }
 
-# flip_byte_file: Flip a byte in a file (portable using python3)
-# This provides more reliable file corruption for testing
+# flip byte (portable, for corruption tests)
 flip_byte_file() {
     local file="$1"
     python3 -c "
@@ -145,7 +144,7 @@ check_prereqs() {
 }
 
 # ============================================================================
-# Utility Functions
+# Utility
 # ============================================================================
 
 log_header() {
@@ -192,10 +191,10 @@ setup() {
     echo "Binary Path:  ${BINARY}"
     echo "Test Dir:     ${TEST_DIR}"
     
-    # Create test directory
+    # test dir
     mkdir -p "${TEST_DIR}"
     
-    # Create a simple policy file for testing
+    # test policy
     cat > "${POLICY_FILE}" << 'EOF'
 name: "Gauntlet Test Policy"
 rules:
@@ -219,7 +218,7 @@ EOF
         exit 1
     fi
     
-    # Verify binary exists
+    # check binary
     if [[ -x "${BINARY}" ]]; then
         pass "Binary is executable"
     else
@@ -227,7 +226,7 @@ EOF
         exit 1
     fi
 
-    # Build mock MCP server
+    # mock server
     echo "Building mock MCP server..."
     if [[ -d "${MOCK_SERVER_DIR}" ]]; then
         if (cd "${MOCK_SERVER_DIR}" && go build -o "${MOCK_SERVER_BINARY}" .); then
@@ -242,7 +241,7 @@ EOF
 }
 
 # ============================================================================
-# Phase 1: Discovery (Scan) with Mock Server Fallback
+# Phase 1: Discovery
 # ============================================================================
 
 phase_discovery() {
@@ -250,13 +249,13 @@ phase_discovery() {
     
     local scan_success=false
     
-    # Try live MCP server first if npx is available AND not forced to use fixture
+    # try live server first
     if [[ "${MCPTRUST_FORCE_FIXTURE:-}" != "1" ]] && command -v npx &> /dev/null; then
         log_test "Attempting scan with live MCP server"
         SERVER_CMD="npx -y @modelcontextprotocol/server-filesystem /tmp"
         
         if "${BINARY}" scan -p -- "${SERVER_CMD}" > "${TEST_DIR}/scan_output.json" 2>&1; then
-            # Check for valid output
+            # check output
             if jq empty "${TEST_DIR}/scan_output.json" 2>/dev/null; then
                 local tools_count
                 tools_count=$(jq '.tools | length' "${TEST_DIR}/scan_output.json" 2>/dev/null || echo "0")
@@ -277,7 +276,7 @@ phase_discovery() {
         fi
     fi
     
-    # Fallback to mock server
+    # fallback
     if [[ "${scan_success}" != "true" ]]; then
         log_test "Using mock MCP server"
         
@@ -299,7 +298,7 @@ phase_discovery() {
         fi
     fi
     
-    # STRICT ASSERTION 1: JSON must be valid
+    # check: valid json
     log_test "Validating scan output is valid JSON"
     if ! jq empty "${TEST_DIR}/scan_output.json" 2>/dev/null; then
         fail "Scan output is not valid JSON"
@@ -309,7 +308,7 @@ phase_discovery() {
     fi
     pass "Scan output is valid JSON"
     
-    # STRICT ASSERTION 2: .error must be empty/null
+    # check: no error
     log_test "Checking scan has no error"
     local scan_error
     scan_error=$(jq -r '.error // ""' "${TEST_DIR}/scan_output.json")
@@ -321,7 +320,7 @@ phase_discovery() {
     fi
     pass "Scan has no error"
     
-    # STRICT ASSERTION 3: .tools must have length > 0
+    # check: tools > 0
     log_test "Checking scan found tools"
     local tools_count
     tools_count=$(jq '.tools | length' "${TEST_DIR}/scan_output.json")
@@ -333,7 +332,7 @@ phase_discovery() {
     fi
     pass "Scan found ${tools_count} tools"
     
-    # Show server type
+    # show server type
     if [[ "${USING_MOCK_SERVER}" == "true" ]]; then
         echo -e "  ${BLUE}ℹ Using deterministic mock server for remaining tests${NC}"
     else
@@ -345,7 +344,7 @@ phase_discovery() {
 }
 
 # ============================================================================
-# Phase 2: Governance (Policy Check)
+# Phase 2: Governance
 # ============================================================================
 
 phase_governance() {
@@ -358,7 +357,7 @@ phase_governance() {
         echo "  Policy output:"
         sed 's/^/    /' "${TEST_DIR}/policy_output.txt"
     else
-        # Policy check might fail if high-risk tools are detected (which is expected behavior)
+        # expected: high risk tools fail policy
         local exit_code=$?
         if [[ ${exit_code} -eq 1 ]]; then
             echo -e "  ${YELLOW}⚠ Policy check returned exit 1 (policy violation detected)${NC}"
@@ -372,7 +371,7 @@ phase_governance() {
 }
 
 # ============================================================================
-# Phase 3: Persistence (Lock)
+# Phase 3: Persistence
 # ============================================================================
 
 phase_persistence() {
@@ -380,7 +379,7 @@ phase_persistence() {
     
     log_test "Creating lockfile from MCP server scan"
     
-    # Change to test directory for output
+    # cd to test dir
     pushd "${TEST_DIR}" > /dev/null
     
     if "${BINARY}" lock -- "${SERVER_CMD}" > lock_output.txt 2>&1; then
@@ -392,7 +391,7 @@ phase_persistence() {
     
     popd > /dev/null
     
-    # Check if lockfile was created
+    # check lockfile
     log_test "Verifying mcp-lock.json exists"
     if [[ -f "${LOCKFILE}" ]]; then
         pass "mcp-lock.json created"
@@ -404,13 +403,13 @@ phase_persistence() {
 }
 
 # ============================================================================
-# Phase 4: Identity (Keygen + Sign)
+# Phase 4: Identity
 # ============================================================================
 
 phase_identity() {
     log_phase "4" "Identity (keygen + sign)"
     
-    # Change to test directory
+    # cd
     pushd "${TEST_DIR}" > /dev/null
     
     log_test "Generating Ed25519 keypair A (primary)"
@@ -421,7 +420,7 @@ phase_identity() {
         sed 's/^/    /' keygen_output.txt
     fi
     
-    # Generate second keypair for negative tests
+    # second keypair for negative tests
     log_test "Generating Ed25519 keypair B (for negative tests)"
     if "${BINARY}" keygen --private "${PRIVATE_KEY_B}" --public "${PUBLIC_KEY_B}" > keygen_output_b.txt 2>&1; then
         pass "Keypair B generated"
@@ -430,7 +429,7 @@ phase_identity() {
         sed 's/^/    /' keygen_output_b.txt
     fi
     
-    # Verify keys exist
+    # check keys
     if [[ -f "${PRIVATE_KEY}" ]] && [[ -f "${PUBLIC_KEY}" ]]; then
         pass "Keypair A files exist"
     else
@@ -451,7 +450,7 @@ phase_identity() {
         sed 's/^/    /' sign_output.txt
     fi
     
-    # Verify signature file exists
+    # check sig file
     log_test "Verifying signature file exists"
     if [[ -f "${SIGNATURE}" ]]; then
         pass "mcp-lock.json.sig created"
@@ -472,7 +471,7 @@ phase_identity() {
 }
 
 # ============================================================================
-# Phase 5: Distribution (Bundle)
+# Phase 5: Distribution
 # ============================================================================
 
 phase_distribution() {
@@ -480,8 +479,7 @@ phase_distribution() {
     
     pushd "${TEST_DIR}" > /dev/null
     
-    # Copy public.key and policy.yaml to expected locations (current directory)
-    # Bundle command looks for files in hardcoded locations
+    # copy required files
     cp "${PUBLIC_KEY}" "public.key" 2>/dev/null || true
     cp "${POLICY_FILE}" "policy.yaml" 2>/dev/null || true
     
@@ -510,7 +508,7 @@ phase_distribution() {
 }
 
 # ============================================================================
-# Phase 5b: Bundle Determinism (Reproducibility)
+# Phase 5b: Determinism
 # ============================================================================
 
 phase_bundle_determinism() {
@@ -518,10 +516,10 @@ phase_bundle_determinism() {
     
     pushd "${TEST_DIR}" > /dev/null
     
-    # We already have bundle.zip from Phase 5. rename it.
+    # rename first bundle
     mv "${BUNDLE_FILE}" "${TEST_DIR}/bundle_run1.zip"
     
-    # Wait 2 seconds to ensure clock ticks (if timestamps were used)
+    # wait (for clock)
     sleep 2
     
     log_test "Creating second bundle (same inputs)"
@@ -537,7 +535,7 @@ phase_bundle_determinism() {
         return 1
     fi
     
-    # Compare hashes
+    # compare
     log_test "Comparing bundle hashes"
     local hash1
     hash1=$(hash_file "${TEST_DIR}/bundle_run1.zip")
@@ -549,7 +547,7 @@ phase_bundle_determinism() {
     
     if [[ "${hash1}" == "${hash2}" ]]; then
         pass "Bundles are identical (deterministic)"
-        # Restore bundle.zip for later tests
+        # restore bundle
         cp "${TEST_DIR}/bundle_run1.zip" "${BUNDLE_FILE}"
     else
         fail "Bundles Differ! (Non-deterministic build)"
@@ -563,7 +561,7 @@ phase_bundle_determinism() {
 }
 
 # ============================================================================
-# Phase 6: Tamper Detection (The Critical Test)
+# Phase 6: Tamper Detection
 # ============================================================================
 
 phase_tamper_detection() {
@@ -571,16 +569,16 @@ phase_tamper_detection() {
     
     pushd "${TEST_DIR}" > /dev/null
     
-    # STRICT ASSERTION 1: Compute hash BEFORE tamper
+    # hash before tamper
     log_test "Computing lockfile hash before tamper"
     local hash_before
     hash_before=$(hash_file "${LOCKFILE}")
     echo "  Hash before tamper: ${hash_before:0:16}..."
     
-    # Create backup BEFORE tampering
+    # backup
     cp "${LOCKFILE}" "${LOCKFILE}.backup"
     
-    # Tamper with the lockfile using Python (deterministic)
+    # tamper
     log_test "Tampering with mcp-lock.json (modifying a hash)"
     
     python3 - <<'PY'
@@ -695,7 +693,7 @@ PY
 }
 
 # ============================================================================
-# Phase 7: NEGATIVE TEST - Wrong Public Key Verify (Identity Failure)
+# Phase 7: Wrong Key
 # ============================================================================
 
 phase_wrong_key_verify() {
@@ -725,7 +723,7 @@ phase_wrong_key_verify() {
 }
 
 # ============================================================================
-# Phase 8: NEGATIVE TEST - Corrupted Signature File (Integrity Failure)
+# Phase 8: Corrupted Signature
 # ============================================================================
 
 phase_corrupted_signature() {
@@ -733,11 +731,10 @@ phase_corrupted_signature() {
     
     pushd "${TEST_DIR}" > /dev/null
     
-    # Backup original signature
+    # backup
     cp "${SIGNATURE}" "${SIGNATURE}.backup"
     
-    # Corrupt the signature by flipping a byte
-    # Corrupt the signature by flipping the first hex nibble
+    # corrupt
     log_test "Corrupting signature file (flipping first hex nibble)"
     
     python3 -c "
@@ -783,7 +780,7 @@ print(f'  Flip: {first} -> {new_first}')
         fail "SECURITY ISSUE: Accepted corrupted signature! (exit code ${exit_code}, expected 1)"
     fi
     
-    # Restore original signature
+    # restore
     mv "${SIGNATURE}.backup" "${SIGNATURE}"
     echo "  Restored original signature"
     
@@ -791,7 +788,7 @@ print(f'  Flip: {first} -> {new_first}')
 }
 
 # ============================================================================
-# Phase 9: NEGATIVE TEST - Corrupted Public Key File (Format Failure)
+# Phase 9: Corrupted Key
 # ============================================================================
 
 phase_corrupted_pubkey() {
@@ -799,10 +796,10 @@ phase_corrupted_pubkey() {
     
     pushd "${TEST_DIR}" > /dev/null
     
-    # Backup original public key
+    # backup
     cp "${PUBLIC_KEY}" "${PUBLIC_KEY}.backup"
     
-    # Corrupt the public key by truncating it
+    # truncate
     log_test "Corrupting public key file (truncating)"
     head -c 10 "${PUBLIC_KEY}.backup" > "${PUBLIC_KEY}"
     
@@ -823,7 +820,7 @@ phase_corrupted_pubkey() {
         fail "SECURITY ISSUE: Accepted corrupted public key! (exit code 0)"
     fi
     
-    # Restore original public key
+    # restore
     mv "${PUBLIC_KEY}.backup" "${PUBLIC_KEY}"
     echo "  Restored original public key"
     
@@ -831,7 +828,7 @@ phase_corrupted_pubkey() {
 }
 
 # ============================================================================
-# Phase 10: NEGATIVE TEST - Policy Fail Path (Governance Failure)
+# Phase 10: Policy Fail
 # ============================================================================
 
 phase_policy_fail() {
@@ -839,7 +836,7 @@ phase_policy_fail() {
     
     pushd "${TEST_DIR}" > /dev/null
     
-    # Create a policy that will intentionally fail
+    # impossible policy
     log_test "Creating impossible policy (size(input.tools) > 9999)"
     cat > "${TEST_DIR}/impossible_policy.yaml" << 'EOF'
 name: "Impossible Policy"
@@ -863,7 +860,7 @@ EOF
         fail "Policy did not fail as expected (exit code ${exit_code}, expected 1)"
     fi
     
-    # Verify failure message appears
+    # check for failure msg
     if grep -q -i "fail\|impossible\|9999" policy_fail_output.txt; then
         pass "Failure message contains expected keywords"
     else
@@ -874,7 +871,7 @@ EOF
 }
 
 # ============================================================================
-# Phase 11: Bundle Integrity Verification (Distribution Assurance)
+# Phase 11: Bundle Integrity
 # ============================================================================
 
 phase_bundle_integrity() {
@@ -882,7 +879,7 @@ phase_bundle_integrity() {
     
     pushd "${TEST_DIR}" > /dev/null
     
-    # Create extraction directory
+    # extract dir
     local extract_dir="${TEST_DIR}/bundle_extract"
     mkdir -p "${extract_dir}"
     
@@ -897,14 +894,14 @@ phase_bundle_integrity() {
         return 1
     fi
     
-    # Verify using extracted files
+    # verify
     log_test "Verifying integrity of extracted bundle (should PASS)"
     
     local extracted_lockfile="${extract_dir}/mcp-lock.json"
     local extracted_sig="${extract_dir}/mcp-lock.json.sig"
     local extracted_pubkey="${extract_dir}/public.key"
     
-    # Check files exist
+    # check files
     if [[ ! -f "${extracted_lockfile}" ]]; then
         fail "Extracted lockfile not found"
         popd > /dev/null
@@ -952,18 +949,7 @@ phase_bundle_integrity() {
     local hash_before
     hash_before=$(hash_file "${extracted_lockfile}")
     
-    # Python-based deterministic tamper (Phase 11)
-    # 1. Loads extracted mcp-lock.json
-    # 2. Selects deterministic tool key
-    # 3. Edits exactly one hex nibble inside description_hash
-    # 4. Writes JSON back (indent=2) so file stays valid JSON
-    
-    # Python-based deterministic tamper (Phase 11)
-    # 1. Loads extracted mcp-lock.json
-    # 2. Selects deterministic tool key
-    # 3. Edits exactly one hex nibble inside description_hash
-    # 4. Writes JSON back (indent=2) so file stays valid JSON
-    
+    # tamper lockfile
     python3 -c "
 import json
 import sys
@@ -976,7 +962,7 @@ try:
     tools = d.get('tools', {})
     if not isinstance(tools, dict) or not tools:
         print('INTERNAL: no tools found')
-        sys.exit(0) # Do not fail, just skip if empty (should check upstream)
+        sys.exit(0)
         
     tool = sorted(tools.keys())[0]
     entry = tools[tool]

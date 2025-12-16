@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mcptrust/mcptrust/internal/models"
 	"github.com/google/cel-go/cel"
+	"github.com/mcptrust/mcptrust/internal/models"
 )
 
 // Engine is the policy evaluation engine using CEL

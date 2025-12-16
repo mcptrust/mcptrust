@@ -83,4 +83,4 @@ Issues and PRs welcome. See [SECURITY.md](SECURITY.md) for vulnerability reporti
 
 ## License
 
-[MIT](LICENSE)
+[Apache-2.0](LICENSE)

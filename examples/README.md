@@ -17,17 +17,22 @@ To run MCPTrust in your pipeline:
 name: MCP Security Check
 on: [pull_request]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.22'
       
+      # Pinned install (recommended). Use @latest for bleeding edge.
       - name: Install MCPTrust
-        run: go install github.com/mcptrust/mcptrust/cmd/mcptrust@latest
+        run: go install github.com/mcptrust/mcptrust/cmd/mcptrust@v0.1.0
       
       - name: Verify Lockfile
         run: mcptrust verify --key public.key

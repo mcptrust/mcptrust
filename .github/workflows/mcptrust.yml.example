@@ -1,0 +1,118 @@
+# MCPTrust CI Workflow Template
+# Copy to .github/workflows/mcptrust.yml and customize MCP_SERVER_COMMAND
+#
+# Prerequisites:
+# - mcp-lock.json committed to repo (run: mcptrust lock -- "<your server>")
+# - mcp-lock.json.sig committed (run: mcptrust sign)
+# - public.key committed
+#
+# For servers that can't run in CI, remove the "Detect drift" step and use verify-only mode.
+
+name: MCPTrust
+
+on:
+  pull_request:
+    branches: [main, master]
+
+env:
+  # REQUIRED: Replace with your MCP server command
+  # If your server needs deps, add a step before "Detect drift" (npm ci, pip install, etc.)
+  MCP_SERVER_COMMAND: "npx -y @modelcontextprotocol/server-filesystem /tmp"
+  
+  # Optional: Customize paths if needed
+  LOCKFILE_PATH: "mcp-lock.json"
+  SIG_PATH: "mcp-lock.json.sig"
+  PUBLIC_KEY_PATH: "public.key"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  mcptrust:
+    name: MCPTrust Security Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: false
+
+      - name: Install mcptrust
+        run: go install github.com/mcptrust/mcptrust/cmd/mcptrust@v0.1.0
+
+      - name: Verify lockfile signature
+        run: |
+          mcptrust verify \
+            --key "${{ env.PUBLIC_KEY_PATH }}" \
+            --lockfile "${{ env.LOCKFILE_PATH }}" \
+            --signature "${{ env.SIG_PATH }}"
+
+      - name: Detect drift
+        id: diff
+        shell: bash
+        run: |
+          set +e
+          mcptrust diff \
+            --lockfile "${{ env.LOCKFILE_PATH }}" \
+            -- bash -lc "${{ env.MCP_SERVER_COMMAND }}" > diff_output.txt 2>&1
+          EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::MCPTrust detected capability drift"
+            cat diff_output.txt
+          fi
+          exit $EXIT_CODE
+
+      - name: Post PR comment on drift
+        if: failure() && steps.diff.outputs.exit_code != '0'
+        uses: actions/github-script@v7
+        env:
+          MCP_SERVER_COMMAND: ${{ env.MCP_SERVER_COMMAND }}
+          LOCKFILE_PATH: ${{ env.LOCKFILE_PATH }}
+        with:
+          script: |
+            const fs = require('fs');
+            const { MCP_SERVER_COMMAND, LOCKFILE_PATH } = process.env;
+            let diffOutput = '';
+            try {
+              diffOutput = fs.readFileSync('diff_output.txt', 'utf8');
+            } catch (e) {
+              diffOutput = 'Could not read diff output';
+            }
+            if (diffOutput.length > 60000) {
+              diffOutput = diffOutput.substring(0, 60000) + '\n... (truncated)';
+            }
+            
+            const body = `## ⚠️ MCPTrust detected capability drift
+
+            **Command:**
+            \`\`\`
+            mcptrust diff --lockfile ${LOCKFILE_PATH} -- bash -lc "${MCP_SERVER_COMMAND}"
+            \`\`\`
+
+            **Output:**
+            \`\`\`
+            ${diffOutput}
+            \`\`\`
+
+            If intentional, re-lock and commit:
+            \`\`\`bash
+            mcptrust lock -- bash -lc "${MCP_SERVER_COMMAND}"
+            mcptrust sign
+            git add mcp-lock.json mcp-lock.json.sig
+            \`\`\`
+
+            📖 [Docs](https://github.com/mcptrust/mcptrust)`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
