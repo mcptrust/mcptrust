@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run Go tests
+        run: go test -v ./...
+
+      - name: Run Go vet
+        run: go vet ./...
+
+      - name: Check gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "❌ Files need formatting:"
+            echo "$unformatted"
+            exit 1
+          fi
+          echo "✅ All files properly formatted"
+
+      - name: Install dependencies
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y shellcheck zip unzip jq python3
+          else
+            brew list shellcheck >/dev/null 2>&1 || brew install shellcheck
+            brew list jq >/dev/null 2>&1 || brew install jq
+            # zip/unzip are standard on macos
+            brew list zip >/dev/null 2>&1 || brew install zip
+            brew list unzip >/dev/null 2>&1 || brew install unzip
+          fi
+
+      - name: Run shellcheck
+        run: shellcheck tests/gauntlet.sh
+
+      - name: Run gauntlet integration test
+        run: bash tests/gauntlet.sh
+        env:
+          MCPTRUST_FORCE_FIXTURE: "1"
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6.1.1
+        with:
+          version: v1.61.0
+          skip-cache: true
+          args: --timeout=5m

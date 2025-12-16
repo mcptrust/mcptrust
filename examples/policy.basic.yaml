@@ -1,0 +1,11 @@
+name: "Basic Policy"
+rules:
+  # Rule: Must have at least one tool
+  - name: "Tools Exist"
+    expr: "size(input.tools) > 0"
+    failure_msg: "Server exposes no tools."
+
+  # Rule: No tools with "delete" in the name
+  - name: "No Delete Tools"
+    expr: "!input.tools.exists(t, t.name.contains('delete'))"
+    failure_msg: "Tools designed to delete data are not allowed."

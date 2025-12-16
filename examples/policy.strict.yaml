@@ -1,0 +1,16 @@
+name: "Strict Production Policy"
+rules:
+  # low risk only
+  - name: "Low Risk Only"
+    expr: "input.tools.all(t, t.risk_level == 'LOW')"
+    failure_msg: "Only LOW risk tools are permitted in production."
+
+  # approved descriptions
+  - name: "Approved Descriptions"
+    expr: "input.tools.all(t, t.description.startsWith('[SAFE]'))"
+    failure_msg: "All tool descriptions must start with [SAFE] tag."
+
+  # complexity limit (< 3 args)
+  - name: "Simple Tools Only"
+    expr: "input.tools.all(t, size(t.inputSchema.properties) <= 3)"
+    failure_msg: "Tools with more than 3 arguments are too complex."
