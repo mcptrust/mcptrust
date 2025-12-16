@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dtang19/mcptrust/internal/models"
+	"github.com/mcptrust/mcptrust/internal/models"
 	"github.com/google/cel-go/cel"
 )
 

@@ -1,4 +1,4 @@
-module github.com/dtang19/mcptrust
+module github.com/mcptrust/mcptrust
 
 go 1.22.0
 

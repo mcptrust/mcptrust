@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/dtang19/mcptrust/internal/cli"
+	"github.com/mcptrust/mcptrust/internal/cli"
 )
 
 func main() {

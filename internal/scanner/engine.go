@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dtang19/mcptrust/internal/models"
+	"github.com/mcptrust/mcptrust/internal/models"
 )
 
 const (

@@ -12,7 +12,7 @@
 
 ```bash
 # Install
-go install github.com/dtang19/mcptrust/cmd/mcptrust@latest
+go install github.com/mcptrust/mcptrust/cmd/mcptrust@latest
 
 # 1. Lock the server's current state
 mcptrust lock -- "npx -y @modelcontextprotocol/server-filesystem /tmp"

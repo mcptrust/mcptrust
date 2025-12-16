@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/dtang19/mcptrust/internal/differ"
+	"github.com/mcptrust/mcptrust/internal/differ"
 	"github.com/spf13/cobra"
 )
 

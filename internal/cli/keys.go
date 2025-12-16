@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dtang19/mcptrust/internal/crypto"
-	"github.com/dtang19/mcptrust/internal/locker"
+	"github.com/mcptrust/mcptrust/internal/crypto"
+	"github.com/mcptrust/mcptrust/internal/locker"
 	"github.com/spf13/cobra"
 )
 

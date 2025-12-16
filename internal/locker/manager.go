@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dtang19/mcptrust/internal/models"
+	"github.com/mcptrust/mcptrust/internal/models"
 )
 
 // DriftType indicates what kind of drift was detected

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dtang19/mcptrust/internal/locker"
-	"github.com/dtang19/mcptrust/internal/models"
-	"github.com/dtang19/mcptrust/internal/scanner"
+	"github.com/mcptrust/mcptrust/internal/locker"
+	"github.com/mcptrust/mcptrust/internal/models"
+	"github.com/mcptrust/mcptrust/internal/scanner"
 	"github.com/wI2L/jsondiff"
 )
 

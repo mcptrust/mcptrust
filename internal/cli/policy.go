@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dtang19/mcptrust/internal/models"
-	"github.com/dtang19/mcptrust/internal/policy"
-	"github.com/dtang19/mcptrust/internal/scanner"
+	"github.com/mcptrust/mcptrust/internal/models"
+	"github.com/mcptrust/mcptrust/internal/policy"
+	"github.com/mcptrust/mcptrust/internal/scanner"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

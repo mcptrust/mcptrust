@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dtang19/mcptrust/internal/scanner"
+	"github.com/mcptrust/mcptrust/internal/scanner"
 	"github.com/spf13/cobra"
 )
 

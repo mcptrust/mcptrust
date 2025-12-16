@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dtang19/mcptrust/internal/locker"
+	"github.com/mcptrust/mcptrust/internal/locker"
 )
 
 // TestBackwardCompatibility_LegacyV1Signature tests that legacy signatures

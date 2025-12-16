@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/dtang19/mcptrust/internal/bundler"
-	"github.com/dtang19/mcptrust/internal/crypto"
-	"github.com/dtang19/mcptrust/internal/models"
+	"github.com/mcptrust/mcptrust/internal/bundler"
+	"github.com/mcptrust/mcptrust/internal/crypto"
+	"github.com/mcptrust/mcptrust/internal/models"
 	"github.com/spf13/cobra"
 )
 

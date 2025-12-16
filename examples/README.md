@@ -27,7 +27,7 @@ jobs:
           go-version: '1.23'
       
       - name: Install MCPTrust
-        run: go install github.com/dtang19/mcptrust/cmd/mcptrust@latest
+        run: go install github.com/mcptrust/mcptrust/cmd/mcptrust@latest
       
       - name: Verify Lockfile
         run: mcptrust verify --key public.key
