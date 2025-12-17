@@ -103,8 +103,8 @@ func addFileToZip(zw *zip.Writer, srcPath, destName string) error {
 	// use dest name
 	header.Name = filepath.Base(destName)
 	header.Method = zip.Deflate
-	// deterministic time (Jan 1, 2025)
-	header.Modified = time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	// deterministic time (ZIP epoch)
+	header.Modified = time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	writer, err := zw.CreateHeader(header)
 	if err != nil {
@@ -120,7 +120,7 @@ func addStringToZip(zw *zip.Writer, content, filename string) error {
 	header := &zip.FileHeader{
 		Name:     filename,
 		Method:   zip.Deflate,
-		Modified: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+		Modified: time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 
 	writer, err := zw.CreateHeader(header)

@@ -3,10 +3,12 @@
 This document outlines the specific security properties guaranteed by the MCPTrust toolchain when used correctly.
 
 ## 1. Integrity (The Lockfile)
-**Guarantee**: If `mcptrust verify` passes, the `mcp-lock.json` file bytes have not been modified by a single bit since it was signed.
+**Guarantee**: If `mcptrust verify` passes, the lockfile's **canonical form** is identical to what was signed.
 
-*   **Mechanism**: Ed25519 digital signatures.
-*   **Proof**: The `tests/gauntlet.sh` suite includes a "Tamper Detection" phase that flips a single bit in the lockfile and asserts verification failure.
+*   **Mechanism**: Ed25519 digital signatures over canonicalized JSON.
+*   **Proof**: The `tests/gauntlet.sh` suite includes a "Tamper Detection" phase that modifies the lockfile and asserts verification failure.
+
+> **Note**: Whitespace or key-order changes that don't affect canonical form will not invalidate signatures.
 
 ## 2. Authenticity (The Signature)
 **Guarantee**: If `mcptrust verify` passes, the `mcp-lock.json` was definitely signed by the holder of the private key corresponding to the provided `public.key`.
@@ -26,7 +28,7 @@ This document outlines the specific security properties guaranteed by the MCPTru
 ## 4. Reproducibility (The Bundle)
 **Guarantee**: `mcptrust bundle export` is deterministic. Running it multiple times on the same input files will produce a bit-for-bit identical `bundle.zip` hash.
 
-*   **Mechanism**: Canonical zip creation with fixed timestamps (Jan 1, 2025) and deterministic file ordering.
+*   **Mechanism**: Canonical zip creation with fixed timestamps (Jan 1, 1980) and deterministic file ordering.
 *   **Why It Matters**: Allows auditors to verify that a distributed bundle corresponds exactly to the source artifacts without trusting the transporter.
 
 ## 5. Governance (The Policy)

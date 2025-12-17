@@ -11,11 +11,8 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "mcptrust",
 	Short: "Security scanner for MCP servers",
-	Long: `mcptrust is the "lockfile for the Agentic Web."
-
-It secures AI agents by verifying Model Context Protocol (MCP) servers
-before they are used. mcptrust interrogates MCP servers for their
-capabilities and analyzes them for security risks.`,
+	Long: `mcptrust: lockfile for the Agentic Web.
+Secures AI agents by verifying MCP servers before use.`,
 	Version: version.BuildVersion(),
 }
 

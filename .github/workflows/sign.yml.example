@@ -1,0 +1,74 @@
+# MCPTrust Sigstore Signing
+# =========================
+# WHAT: Signs lockfile with keyless OIDC on push.
+# WHEN: Push to main involves mcp-lock.json.
+#
+# IDENTITY:
+#   Tied to this specific workflow file and branch.
+#
+# PERMISSIONS:
+#   id-token: write (OIDC)
+#   contents: write (commit sig)
+#
+# SAFEGUARDS:
+#   - Skips if triggered by bot (avoid loops).
+#   - Commits with [skip ci].
+#
+# SETUP:
+#   1. Copy to .github/workflows/sign.yml
+#   2. Commit mcp-lock.json
+#   3. Push to main
+
+name: Sign Lockfile (Sigstore)
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'mcp-lock.json'
+
+permissions:
+  id-token: write   # Required for Sigstore OIDC
+  contents: write   # Required to commit signature
+
+jobs:
+  sign:
+    name: Sign Lockfile
+    runs-on: ubuntu-latest
+    # Skip if this push was made by the bot itself (belt-and-suspenders with path filter)
+    if: github.actor != 'github-actions[bot]'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
+        with:
+          cosign-release: 'v2.4.1'
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: false
+
+      - name: Install mcptrust
+        run: go install github.com/mcptrust/mcptrust/cmd/mcptrust@latest
+
+      - name: Sign lockfile (Sigstore keyless)
+        run: mcptrust sign --sigstore --lockfile mcp-lock.json
+
+      - name: Commit signature
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add mcp-lock.json.sig
+          if git diff --cached --quiet; then
+            echo "No signature changes to commit"
+          else
+            git commit -m "chore: update lockfile signature (Sigstore) [skip ci]"
+            git push
+          fi

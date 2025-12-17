@@ -17,13 +17,17 @@ rules:
 
 ## The `input` Object
 
-The `input` variable represents the `ScanReport`.
+The `input` variable provides access to the scan report:
 
-*   `input.tools`: List of tool objects found on the server.
-    *   `tool.name` (string)
-    *   `tool.description` (string)
-    *   `tool.risk_level` (string: "LOW", "MEDIUM", "HIGH")
-    *   `tool.inputSchema` (map)
+| Field | Type | Description |
+|-------|------|-------------|
+| `input.tools` | list | Tools discovered on server |
+| `input.tools[].name` | string | Tool name |
+| `input.tools[].description` | string | Tool description |
+| `input.tools[].risk_level` | string | `"LOW"`, `"MEDIUM"`, or `"HIGH"` |
+| `input.tools[].inputSchema` | map | JSON Schema for tool arguments |
+
+**Fail-closed behavior**: Parse errors, missing fields, or unknown functions cause the policy check to fail.
 
 ## Examples
 
@@ -42,12 +46,16 @@ rules:
     failure_msg: "High-risk tools are not allowed."
 ```
 
-### Strict Policy
-Restricts tool names and argument complexity.
+### Strict Policy (Denylist)
+Block known dangerous tools by name.
 
 ```yaml
-name: "Strict"
+name: "Strict Denylist"
 rules:
+  - name: "No Dangerous Tools"
+    expr: "!input.tools.exists(t, t.name in ['exec', 'shell', 'eval', 'run_command'])"
+    failure_msg: "Dangerous tool detected."
+
   - name: "Approved Prefix"
     expr: "input.tools.all(t, t.name.startsWith('my_service_'))"
     failure_msg: "Tools must be namespaced with 'my_service_'."

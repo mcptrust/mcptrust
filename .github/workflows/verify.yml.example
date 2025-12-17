@@ -1,0 +1,93 @@
+# MCPTrust Sigstore Verification
+# ==============================
+# WHAT: Verify signatures on PRs.
+# WHEN: PR to main/master.
+#
+# IDENTITY (GitHub Actions):
+#   https://github.com/{owner}/{repo}/.github/workflows/{file}@refs/heads/{branch}
+#   Must match signing workflow exactly.
+#
+# PERMISSIONS:
+#   contents: read (lockfile)
+#   pull-requests: write (comments)
+#
+# SECURITY:
+#   - Strict identity and issuer checks required.
+#
+# SETUP:
+#   1. Copy to .github/workflows/verify.yml
+#   2. Update SIGNER_IDENTITY
+
+name: Verify Lockfile (Sigstore)
+
+on:
+  pull_request:
+    branches: [main, master]
+
+# CUSTOMIZE: Update these environment variables for your repo
+env:
+  # Identity must match signing workflow
+  # Format: https://github.com/{owner}/{repo}/.github/workflows/{file}@refs/heads/{branch}
+  SIGNER_IDENTITY: "https://github.com/${{ github.repository }}/.github/workflows/sign.yml@refs/heads/main"
+  
+  # GitHub Actions OIDC issuer
+  OIDC_ISSUER: "https://token.actions.githubusercontent.com"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify:
+    name: Verify Lockfile Signature
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
+        with:
+          cosign-release: 'v2.4.1'
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: false
+
+      - name: Install mcptrust
+        run: go install github.com/mcptrust/mcptrust/cmd/mcptrust@latest
+
+      - name: Verify lockfile signature
+        id: verify
+        run: |
+          mcptrust verify mcp-lock.json \
+            --issuer "${{ env.OIDC_ISSUER }}" \
+            --identity "${{ env.SIGNER_IDENTITY }}"
+
+      - name: Post success comment
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const identity = process.env.SIGNER_IDENTITY;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ✅ MCPTrust Verified\n\n**Lockfile signature is valid.**\n\n- Mode: Sigstore (keyless OIDC)\n- Identity: \`${identity}\`\n- Issuer: GitHub Actions OIDC`
+            });
+
+      - name: Post failure comment
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ❌ MCPTrust Verification Failed\n\n**Lockfile signature is invalid or missing.**\n\nPossible causes:\n- Lockfile was modified but not re-signed\n- Signature was created by a different workflow\n- Signer identity mismatch\n\n📖 [Docs](https://github.com/mcptrust/mcptrust/blob/main/docs/SIGSTORE.md)`
+            });

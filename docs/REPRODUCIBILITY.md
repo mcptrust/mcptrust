@@ -6,8 +6,10 @@ MCPTrust guarantees that `bundle export` is deterministic.
 
 If you run `mcptrust bundle export` twice on the exact same input files (`mcp-lock.json`, etc.), you will get bit-for-bit identical `bundle.zip` files.
 
+> **Note**: Determinism is guaranteed for the same mcptrust version and Go toolchain. DEFLATE compression output may vary across different Go versions or platforms.
+
 This is achieved by:
-1.  **Fixed Timestamps**: All file entry timestamps in the ZIP are set to `January 1, 2025 00:00:00 UTC`.
+1.  **Fixed Timestamps**: All file entry timestamps in the ZIP are set to `January 1, 1980 00:00:00 UTC` (ZIP epoch).
 2.  **Sorted Files**: Files are added to the archive in alphabetical order.
 3.  **Canonical JSON**: The lockfile itself relies on sorted keys.
 
@@ -33,11 +35,27 @@ For each tool, we compute two distinct hashes:
 
 ### Canonical JSON
 
-We do not rely on standard library JSON marshaling for hashes. Instead, we use a custom **Canonical JSON** process:
+We use two canonicalization versions:
 
-1.  **Maps/Objects**: All keys are sorted alphabetically before marshaling.
-2.  **Order Dependence**: The JSON `{ "a": 1, "b": 2 }` results in the exact same hash as `{ "b": 2, "a": 1 }`.
-3.  **Whitespace**: The canonical form uses dense JSON (no whitespace).
+**v1 (mcptrust-canon-v1)** — Default, internal format:
+1.  Keys sorted alphabetically (Go string/UTF-8 order)
+2.  Compact JSON (no whitespace)
+3.  Standard JSON string escaping
+4.  Numbers preserved as-is from source
+
+**v2 (mcptrust-canon-v2, JCS-like)** — UTF-16 sorted format:
+1.  Keys sorted by UTF-16 code unit order (per RFC 8785)
+2.  Compact JSON
+3.  Go-native number formatting (may differ from ES6 edge cases)
+4.  Recommended for new integrations requiring deterministic ordering
+
+> **Note**: v2 follows JCS key ordering but uses Go's number formatting. For strict RFC 8785 interop, verify with external JCS implementations.
+
+### Description Hash Behavior
+
+`description_hash` uses the **exact raw bytes** of the tool description. Whitespace changes (spaces, newlines) WILL trigger drift detection. This is intentional — documentation changes are security-relevant.
+
+> **Note**: v1 is stable and v2 is interoperable. Both produce deterministic output.
 
 ### Non-Goals
 

@@ -10,26 +10,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ANSI color codes
+// colors
 const (
 	colorYellow = "\033[33m"
 )
 
-// diffCmd represents the diff command
+// diffCmd
 var diffCmd = &cobra.Command{
 	Use:   "diff -- <command>",
 	Short: "Compare live MCP server against lockfile",
-	Long: `Diff compares the current state of an MCP server against the saved
-mcp-lock.json lockfile and reports what has changed.
-
-This is the "Semantic Translator" - it tells you exactly what changed
-in human-readable terms, not just raw JSON patches.
-
-The command to start the MCP server should be provided after '--'.
+	Long: `Compares current server state against mcp-lock.json.
+Reports what changed in human-readable terms ("Semantic Translator").
 
 Example:
-  mcptrust diff -- "npx -y @modelcontextprotocol/server-filesystem /tmp"
-  mcptrust diff -- "python mcp_server.py"`,
+  mcptrust diff -- "npx -y @modelcontextprotocol/server-filesystem /tmp"`,
 	SilenceUsage: true,
 	RunE:         runDiff,
 }
@@ -44,7 +38,7 @@ func init() {
 	diffCmd.Flags().StringVarP(&diffLockfileFlag, "lockfile", "l", defaultLockfilePath, "Path to the lockfile")
 }
 
-// GetDiffCmd returns the diff command
+// GetDiffCmd export
 func GetDiffCmd() *cobra.Command {
 	return diffCmd
 }

@@ -19,7 +19,7 @@ const (
 	CanonV2 CanonVersion = "v2"
 )
 
-// DefaultCanonVersion currently v1
+// DefaultCanonVersion v1 (legacy compatible)
 const DefaultCanonVersion = CanonV1
 
 // CanonicalizeJSONWithVersion helper
@@ -118,7 +118,7 @@ func (om *orderedMapV1) MarshalJSON() ([]byte, error) {
 
 // --- v2 JCS (RFC 8785) implementation ---
 
-// writeJCSValue
+// writeJCSValue recursive
 func writeJCSValue(buf *bytes.Buffer, v interface{}) error {
 	if v == nil {
 		buf.WriteString("null")

@@ -1,11 +1,12 @@
 # Exit Codes
 
-MCPTrust uses strict exit codes to allow reliable scripting and CI/CD integration.
+MCPTrust uses strict exit codes for CI/CD integration.
 
-| Code | Meaning | Description |
+| Code | Category | Examples |
 | :--- | :--- | :--- |
-| `1` | **Failure** | - Drift detected<br>- Signature invalid / Tampering detected<br>- Policy violation<br>- General application error |
-| `2` | **Usage Error** | - Missing arguments (e.g., `diff` without server command) |
+| `0` | **Success** | Verification passed, no drift, policy passed |
+| `1` | **Failure** | Drift detected, signature invalid, policy violation |
+| `2` | **Operational Error** | Missing args, IO error, parse error, cosign missing |
 
 ## Command Behavior
 

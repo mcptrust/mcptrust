@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	// DefaultTimeout is the default timeout for MCP operations
+	// DefaultTimeout default
 	DefaultTimeout = 10 * time.Second
 
 	// MCPProtocolVersion supported
@@ -29,7 +29,7 @@ var dangerousKeywords = []string{
 	"eval", "system", "popen", "subprocess", "terminal",
 }
 
-// Engine interacts with MCP servers
+// Engine MCP client
 type Engine struct {
 	cmd       *exec.Cmd
 	stdin     io.WriteCloser
@@ -131,7 +131,7 @@ func (e *Engine) Initialize(ctx context.Context) (*models.ServerInfo, error) {
 	}, nil
 }
 
-// ListTools retrieves all available tools from the MCP server
+// ListTools list tools
 func (e *Engine) ListTools(ctx context.Context) ([]models.MCPTool, error) {
 	req := models.MCPListRequest{
 		JSONRPC: "2.0",
@@ -155,7 +155,7 @@ func (e *Engine) ListTools(ctx context.Context) ([]models.MCPTool, error) {
 	return resp.Result.Tools, nil
 }
 
-// ListResources retrieves all available resources from the MCP server
+// ListResources list resources
 func (e *Engine) ListResources(ctx context.Context) ([]models.MCPResource, error) {
 	req := models.MCPListRequest{
 		JSONRPC: "2.0",
@@ -180,7 +180,7 @@ func (e *Engine) ListResources(ctx context.Context) ([]models.MCPResource, error
 	return resp.Result.Resources, nil
 }
 
-// Close terminates the MCP server process
+// Close stop server
 func (e *Engine) Close() error {
 	if e.stdin != nil {
 		e.stdin.Close()
@@ -208,7 +208,7 @@ func (e *Engine) Close() error {
 	return nil
 }
 
-// sendRequest sends a JSON-RPC request and reads the response
+// sendRequest JSON-RPC req/resp
 func (e *Engine) sendRequest(ctx context.Context, req interface{}, resp interface{}) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -250,7 +250,7 @@ func (e *Engine) sendRequest(ctx context.Context, req interface{}, resp interfac
 	}
 }
 
-// sendNotification sends a JSON-RPC notification (no response expected)
+// sendNotification JSON-RPC notify
 func (e *Engine) sendNotification(notification interface{}) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -273,7 +273,7 @@ func (e *Engine) nextID() int {
 	return e.requestID
 }
 
-// parseCommand splits a command string into parts, respecting quotes
+// parseCommand split cmd w/ quotes
 func parseCommand(command string) []string {
 	var parts []string
 	var current strings.Builder
@@ -354,7 +354,7 @@ func (ra *RiskAnalyzer) assessRisk(tool models.MCPTool) (models.RiskLevel, []str
 	}
 }
 
-// Scan runs valid security check
+// Scan runs security check
 func Scan(ctx context.Context, command string, timeout time.Duration) (*models.ScanReport, error) {
 	report := &models.ScanReport{
 		Timestamp: time.Now().UTC(),

@@ -17,36 +17,24 @@ const (
 	defaultOutputPath = "approval.zip"
 )
 
-// bundleCmd represents the bundle command group
+// bundleCmd group
 var bundleCmd = &cobra.Command{
 	Use:   "bundle",
 	Short: "Bundle security artifacts for distribution",
-	Long: `Bundle security artifacts into a distributable package.
-
-The bundle command packages your signed mcp-lock.json and related
-artifacts into a single ZIP file for production or compliance use.`,
+	Long:  `Package signed mcp-lock.json and artifacts into a single ZIP.`,
 }
 
-// bundleExportCmd represents the bundle export subcommand
+// bundleExportCmd
 var bundleExportCmd = &cobra.Command{
 	Use:   "export",
 	Short: "Export security artifacts to a deterministic ZIP file",
-	Long: `Export the signed lockfile and security artifacts to a deterministic ZIP bundle.
+	Long: `Export signed lockfile and artifacts to a reproducible bundle.
 
-This creates a reproducible bundle containing:
-  - manifest.json (Bundle metadata with file hashes)
-  - mcp-lock.json (Required - lockfile)
-  - mcp-lock.json.sig (Required - signature)
-  - public.key (Optional, if present)
-  - policy.yaml (Optional, if present)
-  - README.txt (Generated list of approved tools)
-
-The bundle is fully deterministic - identical inputs produce identical outputs.
-The lockfile must be signed before bundling. Use 'mcptrust sign' first.
+Contents: manifest.json, mcp-lock.json, signatures, policy.
+Deterministic: identical inputs = identical outputs.
 
 Example:
-  mcptrust bundle export --output approval.zip
-  mcptrust bundle export -o release-artifacts.zip`,
+  mcptrust bundle export --output approval.zip`,
 	RunE: runBundleExport,
 }
 
@@ -64,7 +52,7 @@ func init() {
 	bundleCmd.AddCommand(bundleExportCmd)
 }
 
-// GetBundleCmd returns the bundle command group
+// GetBundleCmd export
 func GetBundleCmd() *cobra.Command {
 	return bundleCmd
 }

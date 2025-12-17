@@ -2,6 +2,16 @@
 bin/
 /mcptrust
 
-# Private keys (do not ignore public.key)
+# Keys (never commit private keys!)
+# Note: public.key is safe to commit if desired
 private.key
-private*.key
+*.key
+
+# Lockfile and signatures (unless explicitly wanted)
+# Remove these lines if you intentionally want to commit them
+mcp-lock.json
+*.sig
+
+# Test/smoke outputs
+/tmp/
+*.log

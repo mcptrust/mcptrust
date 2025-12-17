@@ -11,11 +11,13 @@ import (
 
 // BundleManifest contents
 type BundleManifest struct {
-	ToolVersion   string         `json:"tool_version"`
-	Files         []ManifestFile `json:"files"`
-	LockfileHash  string         `json:"lockfile_hash"`
-	SignatureHash string         `json:"signature_hash"`
-	CanonVersion  string         `json:"canon_version,omitempty"`
+	ToolVersion       string         `json:"tool_version"`
+	GoVersion         string         `json:"go_version,omitempty"`
+	CompressionMethod string         `json:"compression_method,omitempty"`
+	Files             []ManifestFile `json:"files"`
+	LockfileHash      string         `json:"lockfile_hash"`
+	SignatureHash     string         `json:"signature_hash"`
+	CanonVersion      string         `json:"canon_version,omitempty"`
 }
 
 // ManifestFile desc
@@ -28,9 +30,11 @@ type ManifestFile struct {
 // GenerateManifest for contents
 func GenerateManifest(opts BundleOptions, canonVersion string) (*BundleManifest, error) {
 	manifest := &BundleManifest{
-		ToolVersion:  getToolVersion(),
-		Files:        []ManifestFile{},
-		CanonVersion: canonVersion,
+		ToolVersion:       getToolVersion(),
+		GoVersion:         getGoVersion(),
+		CompressionMethod: "deflate",
+		Files:             []ManifestFile{},
+		CanonVersion:      canonVersion,
 	}
 
 	// hash lockfile
@@ -107,4 +111,12 @@ func getToolVersion() string {
 		return info.Main.Version
 	}
 	return "dev"
+}
+
+func getGoVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if ok {
+		return info.GoVersion
+	}
+	return "unknown"
 }

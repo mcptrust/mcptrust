@@ -15,28 +15,22 @@ const (
 	defaultLockfilePath = "mcp-lock.json"
 )
 
-// ANSI color codes for terminal output
+// colors
 const (
 	colorRed   = "\033[31m"
 	colorGreen = "\033[32m"
 	colorReset = "\033[0m"
 )
 
-// lockCmd represents the lock command
+// lockCmd
 var lockCmd = &cobra.Command{
 	Use:   "lock -- <command>",
 	Short: "Lock MCP server capabilities to mcp-lock.json",
-	Long: `Lock scans an MCP server and creates a lockfile (mcp-lock.json) that
-captures the current state of all tools with their capability hashes.
-
-This lockfile serves as a "Safety Anchor" - if the server's capabilities
-change in the future, mcptrust can detect the drift and alert you.
-
-The command to start the MCP server should be provided after '--'.
+	Long: `Scans server and creates mcp-lock.json capturing current capabilities.
+Facilitates drift detection.
 
 Example:
-  mcptrust lock -- "npx -y @modelcontextprotocol/server-filesystem /tmp"
-  mcptrust lock -- "python mcp_server.py"`,
+  mcptrust lock -- "npx -y @modelcontextprotocol/server-filesystem /tmp"`,
 	RunE: runLock,
 }
 
@@ -52,7 +46,7 @@ func init() {
 	lockCmd.Flags().BoolVarP(&lockForceFlag, "force", "f", false, "Overwrite lockfile even if drift is detected")
 }
 
-// GetLockCmd returns the lock command
+// GetLockCmd export
 func GetLockCmd() *cobra.Command {
 	return lockCmd
 }

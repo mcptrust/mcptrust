@@ -29,23 +29,22 @@ var defaultPolicy = models.PolicyConfig{
 	},
 }
 
+// policyCmd group
 var policyCmd = &cobra.Command{
 	Use:   "policy",
 	Short: "Policy management commands",
-	Long:  `Manage and enforce security policies against MCP servers.`,
+	Long:  `Manage and enforce security policies.`,
 }
 
+// policyCheckCmd
 var policyCheckCmd = &cobra.Command{
 	Use:   "check -- <command>",
 	Short: "Check an MCP server against security policies",
-	Long: `Check an MCP server's capabilities against security policies defined in a YAML file.
-
-Policies use CEL (Common Expression Language) to define rules that are evaluated
-against the scan report. The 'input' variable provides access to the scan data.
+	Long: `Evaluate server capabilities against YAML policies (CEL rules).
+'input' variable provides access to scan data.
 
 Example:
-  mcptrust policy check --policy ./policy.yaml -- "npx -y @modelcontextprotocol/server-filesystem /tmp"
-  mcptrust policy check -- "python mcp_server.py"`,
+  mcptrust policy check --policy ./policy.yaml -- "npx -y .../server-fs /tmp"`,
 	SilenceUsage: true,
 	RunE:         runPolicyCheck,
 }
@@ -61,7 +60,7 @@ func init() {
 	policyCmd.AddCommand(policyCheckCmd)
 }
 
-// GetPolicyCmd returns the policy command
+// GetPolicyCmd export
 func GetPolicyCmd() *cobra.Command {
 	return policyCmd
 }
@@ -133,7 +132,7 @@ func runPolicyCheck(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// loadPolicy loads a policy from a YAML file or returns the default policy
+// loadPolicy returns policy or default
 func loadPolicy(path string) (*models.PolicyConfig, error) {
 	if path == "" {
 		return &defaultPolicy, nil
@@ -156,7 +155,7 @@ func loadPolicy(path string) (*models.PolicyConfig, error) {
 	return &config, nil
 }
 
-// extractPolicyCommand gets the command string from args
+// extractPolicyCommand parses args
 func extractPolicyCommand(args []string) string {
 	if len(args) == 0 {
 		// Check if command comes from os.Args

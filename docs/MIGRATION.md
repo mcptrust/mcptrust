@@ -7,7 +7,12 @@ This document describes backward compatibility and migration considerations for 
 MCPTrust now supports versioned canonicalization for JSON signing:
 
 - **v1** (default): Original canonicalization algorithm. Keys sorted by Go string comparison.
-- **v2**: JCS (RFC 8785) compliant canonicalization. Keys sorted by UTF-16 code units.
+- **v2**: JCS-like canonicalization. Keys sorted by UTF-16 code units (per RFC 8785), Go-native number formatting.
+
+| `.sig` header value | Doc name | Algorithm |
+|---------------------|----------|-----------|
+| `v1` | mcptrust-canon-v1 | Go string sort, compact JSON |
+| `v2` | mcptrust-canon-v2 | UTF-16 sort (JCS-like), compact JSON |
 
 ### Backward Compatibility
 
@@ -43,7 +48,7 @@ For most use cases, v1 (default) is recommended.
 
 `bundle export` now produces fully deterministic ZIP bundles:
 
-- Fixed timestamps (2025-01-01 UTC)
+- Fixed timestamps (1980-01-01 UTC)
 - Alphabetical file ordering
 - Consistent compression settings
 

@@ -1,0 +1,1 @@
+{"server_command":"test-server","tools":{"alpha_tool":{"description_hash":"sha256:123","input_schema_hash":"sha256:456","risk_level":"HIGH"},"zeta_tool":{"description_hash":"sha256:abc","input_schema_hash":"sha256:def","risk_level":"LOW"}},"version":"1.0"}

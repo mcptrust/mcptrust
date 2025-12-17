@@ -1,8 +1,10 @@
 package locker
 
 import (
+	"bytes"
 	"encoding/json"
 	"math"
+	"os"
 	"strings"
 	"testing"
 )
@@ -448,5 +450,55 @@ func TestJCSV1V2Determinism(t *testing.T) {
 		if v2Results[0] != v2Results[i] {
 			t.Errorf("v2 not deterministic: iteration 0 != iteration %d", i)
 		}
+	}
+}
+
+// TestCanonVectors validates output against testdata/canon_vectors
+func TestCanonVectors(t *testing.T) {
+	inputPath := "../../testdata/canon_vectors/input.json"
+	v1Path := "../../testdata/canon_vectors/canon_v1.json"
+	v2Path := "../../testdata/canon_vectors/canon_v2.json"
+
+	// read input
+	inputData, err := os.ReadFile(inputPath)
+	if err != nil {
+		t.Skipf("test vectors not found: %v", err)
+	}
+
+	var input interface{}
+	dec := json.NewDecoder(bytes.NewReader(inputData))
+	dec.UseNumber()
+	if err := dec.Decode(&input); err != nil {
+		t.Fatalf("parse input: %v", err)
+	}
+
+	// test v1
+	v1Expected, err := os.ReadFile(v1Path)
+	if err != nil {
+		t.Fatalf("read v1 vector: %v", err)
+	}
+	v1Expected = bytes.TrimSpace(v1Expected)
+
+	v1Result, err := CanonicalizeJSONv1(input)
+	if err != nil {
+		t.Fatalf("v1 canonicalize: %v", err)
+	}
+	if !bytes.Equal(v1Result, v1Expected) {
+		t.Errorf("v1 mismatch:\nexpected: %s\ngot:      %s", v1Expected, v1Result)
+	}
+
+	// test v2
+	v2Expected, err := os.ReadFile(v2Path)
+	if err != nil {
+		t.Fatalf("read v2 vector: %v", err)
+	}
+	v2Expected = bytes.TrimSpace(v2Expected)
+
+	v2Result, err := CanonicalizeJSONv2(input)
+	if err != nil {
+		t.Fatalf("v2 canonicalize: %v", err)
+	}
+	if !bytes.Equal(v2Result, v2Expected) {
+		t.Errorf("v2 mismatch:\nexpected: %s\ngot:      %s", v2Expected, v2Result)
 	}
 }

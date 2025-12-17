@@ -31,8 +31,7 @@ func HashJSON(v interface{}) (string, error) {
 	return fmt.Sprintf("sha256:%x", hash), nil
 }
 
-// CanonicalizeJSON uses v1 canonicalization for backward compatibility
-// This is the main entry point for existing code - preserves original behavior
+// CanonicalizeJSON v1 compat (preserve behavior)
 func CanonicalizeJSON(v interface{}) ([]byte, error) {
 	return CanonicalizeJSONv1(v)
 }

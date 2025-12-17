@@ -175,9 +175,11 @@ mcptrust keygen --private my-private.key --public my-public.key
 ---
 
 ### `sign`
-Sign the `mcp-lock.json` lockfile using your Ed25519 private key.
+Sign the `mcp-lock.json` lockfile using Ed25519 private key or Sigstore keyless signing.
 
-This creates a signature file (`mcp-lock.json.sig`) that can be used to verify the lockfile hasn't been tampered with.
+Supports two modes:
+- **Ed25519** (default): Sign with a private key file
+- **Sigstore keyless** (`--sigstore`): Sign using OIDC identity (GitHub Actions, etc.)
 
 The signature is computed over the canonical (deterministic) JSON representation of the lockfile, ensuring consistent verification.
 
@@ -191,14 +193,22 @@ mcptrust sign [flags]
 | :--- | :--- | :--- |
 | `--canonicalization` | `"v1"` | Canonicalization version (v1 or v2) |
 | `-h, --help` | | help for sign |
-| `-k, --key` | `"private.key"` | Path to the private key |
+| `-k, --key` | `"private.key"` | Path to the private key (Ed25519 mode) |
 | `-l, --lockfile` | `"mcp-lock.json"` | Path to the lockfile to sign |
-| `-o, --output` | `"mcp-lock.json.sig"` | Path for the signature file |
+| `-o, --output` | `"<lockfile>.sig"` | Path for the signature file |
+| `--sigstore` | `false` | Use Sigstore keyless signing (requires cosign) |
+| `--bundle-out` | | Also write raw Sigstore bundle to this path |
 
-**Example**
+**Examples**
 ```bash
-mcptrust sign
-mcptrust sign --lockfile custom-lock.json --key my-private.key
+# Ed25519 signing
+mcptrust sign --key private.key
+
+# Sigstore keyless signing (CI/CD)
+mcptrust sign --sigstore
+
+# Custom lockfile
+mcptrust sign --sigstore --lockfile custom-lock.json
 ```
 
 ---
@@ -206,7 +216,10 @@ mcptrust sign --lockfile custom-lock.json --key my-private.key
 ### `verify`
 Verify that the `mcp-lock.json` lockfile matches its signature.
 
-This checks that the lockfile hasn't been tampered with since it was signed.
+The signature type is auto-detected:
+- **Ed25519**: Requires `--key` flag
+- **Sigstore**: Requires `--issuer` and `--identity` (or `--identity-regexp`)
+
 Returns exit code 0 if valid, 1 if verification fails.
 
 ```bash
@@ -218,14 +231,28 @@ mcptrust verify [flags]
 | Flag | Default | Description |
 | :--- | :--- | :--- |
 | `-h, --help` | | help for verify |
-| `-k, --key` | `"public.key"` | Path to the public key |
+| `-k, --key` | `"public.key"` | Path to the public key (Ed25519 mode) |
 | `-l, --lockfile` | `"mcp-lock.json"` | Path to the lockfile to verify |
-| `-s, --signature` | `"mcp-lock.json.sig"` | Path to the signature file |
+| `-s, --signature` | `"<lockfile>.sig"` | Path to the signature file |
+| `--issuer` | | Expected OIDC issuer for Sigstore verification |
+| `--identity` | | Expected certificate identity (SAN) for Sigstore |
+| `--identity-regexp` | | Regexp pattern for certificate identity |
+| `--github-actions` | `false` | Preset: use GitHub Actions OIDC issuer |
 
-**Example**
+**Examples**
 ```bash
-mcptrust verify
-mcptrust verify --lockfile custom-lock.json --signature custom.sig --key my-public.key
+# Ed25519 verification
+mcptrust verify --key public.key
+
+# Sigstore verification (GitHub Actions signed)
+mcptrust verify mcp-lock.json \
+  --issuer https://token.actions.githubusercontent.com \
+  --identity "https://github.com/org/repo/.github/workflows/sign.yml@refs/heads/main"
+
+# Sigstore with identity regex (accept any branch)
+mcptrust verify mcp-lock.json \
+  --github-actions \
+  --identity-regexp "https://github.com/org/repo/.*"
 ```
 
 ---
