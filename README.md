@@ -15,7 +15,7 @@
 ```bash
 # Install
 go install github.com/mcptrust/mcptrust/cmd/mcptrust@latest
-mcptrust version  # verify installation
+mcptrust --version  # verify installation
 
 # 1. Lock the server's current state
 mcptrust lock -- "npx -y @modelcontextprotocol/server-filesystem /tmp"
