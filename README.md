@@ -2,7 +2,7 @@
 
 **Lockfile for MCP servers.** Secure AI agent tool discovery with cryptographic integrity.
 
-## Why MCPTrust?
+## Why MCPTrust??
 
 - **Integrity** — Ed25519 or Sigstore keyless signatures ensure your lockfile hasn't been tampered with
 - **Drift Detection** — Know instantly when an MCP server's tools change
