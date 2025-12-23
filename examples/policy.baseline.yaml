@@ -1,0 +1,40 @@
+name: "Baseline (Warn-Only)"
+# Mode: warn - warnings don't cause failure, allowing teams to see issues
+# without blocking builds during initial adoption
+
+rules:
+  - name: "artifact_pinned"
+    expr: 'has(input.artifact) && input.artifact.integrity != ""'
+    failure_msg: "⚠ Artifact is not pinned — recommend running 'mcptrust lock --pin'"
+    severity: warn
+    control_refs:
+      - "NIST AI RMF: GOVERN 1.1"
+      - "SOC2: CC7.2"
+    evidence:
+      - "Signed mcp-lock.json with integrity hash"
+    evidence_commands:
+      - "mcptrust verify --lockfile mcp-lock.json"
+
+  - name: "no_high_risk_tools"
+    expr: '!input.tools.exists(t, t.risk_level == "HIGH")'
+    failure_msg: "⚠ High-risk tools detected — review before production use"
+    severity: warn
+    control_refs:
+      - "NIST AI RMF: MEASURE 2.3"
+      - "ISO/IEC 42001: 9.2"
+    evidence:
+      - "mcptrust scan output with risk classification"
+    evidence_commands:
+      - "mcptrust scan -- <server command>"
+      - "mcptrust policy check --preset baseline -- <server command>"
+
+  - name: "tools_exist"
+    expr: "size(input.tools) > 0"
+    failure_msg: "⚠ Server exposes no tools"
+    severity: warn
+    control_refs:
+      - "NIST AI RMF: GOVERN 2.1"
+    evidence:
+      - "mcptrust scan output listing tools"
+    evidence_commands:
+      - "mcptrust scan -- <server command>"

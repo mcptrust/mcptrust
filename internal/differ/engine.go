@@ -12,7 +12,6 @@ import (
 	"github.com/wI2L/jsondiff"
 )
 
-// DiffType indicates what kind of difference was detected
 type DiffType string
 
 const (
@@ -22,7 +21,6 @@ const (
 	DiffTypeNoChange DiffType = "no_change"
 )
 
-// ToolDiff represents the difference for a single tool
 type ToolDiff struct {
 	ToolName     string
 	DiffType     DiffType
@@ -30,13 +28,11 @@ type ToolDiff struct {
 	Translations []string       // Human-readable translations
 }
 
-// DiffResult contains the complete diff result
 type DiffResult struct {
 	HasChanges bool
 	ToolDiffs  []ToolDiff
 }
 
-// Engine performs diff operations
 type Engine struct {
 	lockerManager *locker.Manager
 	timeout       time.Duration
@@ -49,9 +45,7 @@ func NewEngine(timeout time.Duration) *Engine {
 	}
 }
 
-// ComputeDiff loads the lockfile and compares it against a fresh scan
 func (e *Engine) ComputeDiff(ctx context.Context, lockfilePath, command string) (*DiffResult, error) {
-	// load lockfile
 	if !e.lockerManager.Exists(lockfilePath) {
 		return nil, fmt.Errorf("lockfile not found: %s (run 'mcptrust lock' first)", lockfilePath)
 	}
@@ -61,7 +55,6 @@ func (e *Engine) ComputeDiff(ctx context.Context, lockfilePath, command string) 
 		return nil, fmt.Errorf("failed to load lockfile: %w", err)
 	}
 
-	// scan
 	report, err := scanner.Scan(ctx, command, e.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("scan failed: %w", err)
@@ -71,7 +64,6 @@ func (e *Engine) ComputeDiff(ctx context.Context, lockfilePath, command string) 
 		return nil, fmt.Errorf("scan error: %s", report.Error)
 	}
 
-	// current tools map
 	currentTools := make(map[string]models.Tool)
 	for _, tool := range report.Tools {
 		currentTools[tool.Name] = tool
@@ -82,7 +74,6 @@ func (e *Engine) ComputeDiff(ctx context.Context, lockfilePath, command string) 
 		ToolDiffs:  []ToolDiff{},
 	}
 
-	// removed
 	for toolName := range lockfile.Tools {
 		if _, found := currentTools[toolName]; !found {
 			result.HasChanges = true
@@ -94,11 +85,9 @@ func (e *Engine) ComputeDiff(ctx context.Context, lockfilePath, command string) 
 		}
 	}
 
-	// added/changed
 	for _, tool := range report.Tools {
 		lockedTool, found := lockfile.Tools[tool.Name]
 		if !found {
-			// added
 			result.HasChanges = true
 			result.ToolDiffs = append(result.ToolDiffs, ToolDiff{
 				ToolName:     tool.Name,
@@ -108,13 +97,11 @@ func (e *Engine) ComputeDiff(ctx context.Context, lockfilePath, command string) 
 			continue
 		}
 
-		// schema check
 		patches, translations, err := e.compareSchemas(lockedTool, tool)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compare schemas for tool %s: %w", tool.Name, err)
 		}
 
-		// check translations not just patches
 		if len(translations) > 0 {
 			result.HasChanges = true
 			result.ToolDiffs = append(result.ToolDiffs, ToolDiff{
@@ -129,9 +116,7 @@ func (e *Engine) ComputeDiff(ctx context.Context, lockfilePath, command string) 
 	return result, nil
 }
 
-// compareSchemas compares the locked schema hashes against the current tool
 func (e *Engine) compareSchemas(locked models.ToolLock, current models.Tool) (jsondiff.Patch, []string, error) {
-	// current hashes
 	currentDescHash := locker.HashString(current.Description)
 	currentSchemaHash, err := locker.HashJSON(current.InputSchema)
 	if err != nil {
@@ -141,14 +126,11 @@ func (e *Engine) compareSchemas(locked models.ToolLock, current models.Tool) (js
 	var allPatches jsondiff.Patch
 	var translations []string
 
-	// desc
 	if locked.DescriptionHash != currentDescHash {
 		translations = append(translations, "Documentation update: description has changed.")
 	}
 
-	// schema diff
 	if locked.InputSchemaHash != currentSchemaHash {
-		// diff against empty schema since only hash is stored
 		patches, err := e.analyzeSchemaChanges(current.InputSchema)
 		if err != nil {
 			return nil, nil, err
@@ -157,7 +139,6 @@ func (e *Engine) compareSchemas(locked models.ToolLock, current models.Tool) (js
 		allPatches = patches
 		translations = append(translations, Translate(patches)...)
 
-		// fallback translation
 		if len(allPatches) == 0 && locked.InputSchemaHash != currentSchemaHash {
 			translations = append(translations, "Input schema has been modified.")
 		}
@@ -166,13 +147,11 @@ func (e *Engine) compareSchemas(locked models.ToolLock, current models.Tool) (js
 	return allPatches, translations, nil
 }
 
-// analyzeSchemaChanges vs empty
 func (e *Engine) analyzeSchemaChanges(schema map[string]interface{}) (jsondiff.Patch, error) {
 	if schema == nil {
 		return nil, nil
 	}
 
-	// empty vs current
 	emptySchema := map[string]interface{}{}
 
 	sourceJSON, err := json.Marshal(emptySchema)
@@ -193,7 +172,6 @@ func (e *Engine) analyzeSchemaChanges(schema map[string]interface{}) (jsondiff.P
 	return patches, nil
 }
 
-// ComputeFullDiff used for testing
 func (e *Engine) ComputeFullDiff(lockedSchema, currentSchema map[string]interface{}) (jsondiff.Patch, error) {
 	lockedJSON, err := json.Marshal(lockedSchema)
 	if err != nil {

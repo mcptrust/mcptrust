@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// BundleOptions contains paths for bundle creation
+// BundleOptions struct
 type BundleOptions struct {
 	LockfilePath  string
 	SignaturePath string
@@ -18,8 +18,7 @@ type BundleOptions struct {
 	OutputPath    string
 }
 
-// CreateBundle creates a ZIP archive containing security artifacts
-// Files are added in alphabetical order for determinism
+// CreateBundle zip
 func CreateBundle(opts BundleOptions, readmeContent string, manifest *BundleManifest) error {
 	// output file
 	outputFile, err := os.Create(opts.OutputPath)
@@ -82,7 +81,7 @@ func CreateBundle(opts BundleOptions, readmeContent string, manifest *BundleMani
 	return nil
 }
 
-// addFileToZip adds a file from the filesystem to the ZIP archive
+// addFileToZip helper
 func addFileToZip(zw *zip.Writer, srcPath, destName string) error {
 	file, err := os.Open(srcPath)
 	if err != nil {
@@ -115,7 +114,7 @@ func addFileToZip(zw *zip.Writer, srcPath, destName string) error {
 	return err
 }
 
-// addStringToZip adds a string as a file to the ZIP archive
+// addStringToZip helper
 func addStringToZip(zw *zip.Writer, content, filename string) error {
 	header := &zip.FileHeader{
 		Name:     filename,

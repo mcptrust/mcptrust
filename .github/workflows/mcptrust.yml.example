@@ -1,12 +1,12 @@
 # MCPTrust CI Workflow Template
-# Copy to .github/workflows/mcptrust.yml and customize MCP_SERVER_COMMAND
+# Copy to .github/workflows/mcptrust.yml
 #
-# Prerequisites:
-# - mcp-lock.json committed to repo (run: mcptrust lock -- "<your server>")
-# - mcp-lock.json.sig committed (run: mcptrust sign)
+# Prereqs:
+# - mcp-lock.json committed
+# - mcp-lock.json.sig committed
 # - public.key committed
 #
-# For servers that can't run in CI, remove the "Detect drift" step and use verify-only mode.
+# If server can't run in CI, remove "Detect drift".
 
 name: MCPTrust
 
@@ -15,8 +15,8 @@ on:
     branches: [main, master]
 
 env:
-  # REQUIRED: Replace with your MCP server command
-  # If your server needs deps, add a step before "Detect drift" (npm ci, pip install, etc.)
+  # REQUIRED: Your server command
+  # Add deps step if needed (npm ci, etc.)
   MCP_SERVER_COMMAND: "npx -y @modelcontextprotocol/server-filesystem /tmp"
   
   # Optional: Customize paths if needed
@@ -35,10 +35,10 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.2.0
         with:
           go-version: "1.22"
           cache: false
@@ -71,7 +71,7 @@ jobs:
 
       - name: Post PR comment on drift
         if: failure() && steps.diff.outputs.exit_code != '0'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.0.1
         env:
           MCP_SERVER_COMMAND: ${{ env.MCP_SERVER_COMMAND }}
           LOCKFILE_PATH: ${{ env.LOCKFILE_PATH }}

@@ -1,0 +1,34 @@
+{
+    "lockFileVersion": "3.0",
+    "meta": {
+        "generator": "mcptrust-test",
+        "updatedAt": "2024-01-01T00:00:00Z"
+    },
+    "server": {
+        "name": "mock-proxy-server"
+    },
+    "prompts": {
+        "definitions": {
+            "safe_prompt": {
+                "argumentsHash": "sha256:a5b9f59c2f94b3cb1d0e15b2e87c41f8c1b5a0d3e7f2c4a6b8d0e2f4a6c8b0d2",
+                "descriptionHash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+        }
+    },
+    "resources": {
+        "templates": [
+            {
+                "uriTemplate": "db://{id}",
+                "templateHash": "sha256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069",
+                "nameHash": "sha256:2c70e12b7a0646f92279f427c7b38e7334d8e5389cff167a1dc30e73f826b683",
+                "mimeType": "application/json"
+            }
+        ]
+    },
+    "tools": {
+        "safe_tool": {
+            "descriptionHash": "sha256:4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5",
+            "inputSchemaHash": "sha256:8b5b02f7c16fc62b1e4e5e4e9f4e5c6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3"
+        }
+    }
+}

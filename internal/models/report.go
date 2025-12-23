@@ -2,7 +2,6 @@ package models
 
 import "time"
 
-// RiskLevel enum
 type RiskLevel string
 
 const (
@@ -11,7 +10,6 @@ const (
 	RiskLevelHigh   RiskLevel = "HIGH"
 )
 
-// Tool definition
 type Tool struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
@@ -20,7 +18,6 @@ type Tool struct {
 	RiskReasons []string               `json:"riskReasons,omitempty"`
 }
 
-// Resource definition
 type Resource struct {
 	URI         string `json:"uri"`
 	Name        string `json:"name"`
@@ -34,17 +31,36 @@ type ServerInfo struct {
 	ProtocolVersion string `json:"protocolVersion"`
 }
 
-// ScanReport result
-type ScanReport struct {
-	Timestamp  time.Time   `json:"timestamp"`
-	Command    string      `json:"command"`
-	ServerInfo *ServerInfo `json:"serverInfo,omitempty"`
-	Tools      []Tool      `json:"tools"`
-	Resources  []Resource  `json:"resources"`
-	Error      string      `json:"error,omitempty"`
+type Prompt struct {
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	Arguments   []PromptArgument `json:"arguments,omitempty"`
 }
 
-// MCPInitializeRequest jsonrpc
+type PromptArgument struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+}
+
+type ResourceTemplate struct {
+	URITemplate string `json:"uriTemplate"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	MimeType    string `json:"mimeType,omitempty"`
+}
+
+type ScanReport struct {
+	Timestamp         time.Time          `json:"timestamp"`
+	Command           string             `json:"command"`
+	ServerInfo        *ServerInfo        `json:"serverInfo,omitempty"`
+	Tools             []Tool             `json:"tools"`
+	Resources         []Resource         `json:"resources"`
+	Prompts           []Prompt           `json:"prompts"`
+	ResourceTemplates []ResourceTemplate `json:"resourceTemplates"`
+	Error             string             `json:"error,omitempty"`
+}
+
 type MCPInitializeRequest struct {
 	JSONRPC string              `json:"jsonrpc"`
 	ID      int                 `json:"id"`
@@ -65,7 +81,6 @@ type MCPClientInfo struct {
 	Version string `json:"version"`
 }
 
-// MCPInitializeResponse jsonrpc
 type MCPInitializeResponse struct {
 	JSONRPC string               `json:"jsonrpc"`
 	ID      int                  `json:"id"`
@@ -89,15 +104,17 @@ type MCPError struct {
 	Message string `json:"message"`
 }
 
-// MCPListRequest list
 type MCPListRequest struct {
-	JSONRPC string      `json:"jsonrpc"`
-	ID      int         `json:"id"`
-	Method  string      `json:"method"`
-	Params  interface{} `json:"params,omitempty"`
+	JSONRPC string         `json:"jsonrpc"`
+	ID      int            `json:"id"`
+	Method  string         `json:"method"`
+	Params  *MCPListParams `json:"params,omitempty"`
 }
 
-// MCPToolsListResponse list response
+type MCPListParams struct {
+	Cursor string `json:"cursor,omitempty"`
+}
+
 type MCPToolsListResponse struct {
 	JSONRPC string              `json:"jsonrpc"`
 	ID      int                 `json:"id"`
@@ -109,14 +126,12 @@ type MCPToolsListResult struct {
 	Tools []MCPTool `json:"tools"`
 }
 
-// MCPTool schema
 type MCPTool struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
 	InputSchema map[string]interface{} `json:"inputSchema,omitempty"`
 }
 
-// MCPResourcesListResponse list response
 type MCPResourcesListResponse struct {
 	JSONRPC string                  `json:"jsonrpc"`
 	ID      int                     `json:"id"`
@@ -128,7 +143,6 @@ type MCPResourcesListResult struct {
 	Resources []MCPResource `json:"resources"`
 }
 
-// MCPResource schema
 type MCPResource struct {
 	URI         string `json:"uri"`
 	Name        string `json:"name"`
@@ -136,9 +150,36 @@ type MCPResource struct {
 	MimeType    string `json:"mimeType,omitempty"`
 }
 
-// MCPNotification msg
 type MCPNotification struct {
 	JSONRPC string      `json:"jsonrpc"`
 	Method  string      `json:"method"`
 	Params  interface{} `json:"params,omitempty"`
 }
+
+type MCPPromptsListResponse struct {
+	JSONRPC string                `json:"jsonrpc"`
+	ID      int                   `json:"id"`
+	Result  *MCPPromptsListResult `json:"result,omitempty"`
+	Error   *MCPError             `json:"error,omitempty"`
+}
+
+type MCPPromptsListResult struct {
+	Prompts    []Prompt `json:"prompts"`
+	NextCursor string   `json:"nextCursor,omitempty"`
+}
+
+type MCPResourceTemplatesListResponse struct {
+	JSONRPC string                          `json:"jsonrpc"`
+	ID      int                             `json:"id"`
+	Result  *MCPResourceTemplatesListResult `json:"result,omitempty"`
+	Error   *MCPError                       `json:"error,omitempty"`
+}
+
+type MCPResourceTemplatesListResult struct {
+	ResourceTemplates []ResourceTemplate `json:"resourceTemplates"`
+	NextCursor        string             `json:"nextCursor,omitempty"`
+}
+
+const (
+	JSONRPCMethodNotFound = -32601
+)

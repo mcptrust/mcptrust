@@ -6,7 +6,7 @@ import (
 	"github.com/wI2L/jsondiff"
 )
 
-// Translate patches to english
+// Translate creates human-readable diffs
 func Translate(patches jsondiff.Patch) []string {
 	if len(patches) == 0 {
 		return nil
@@ -26,6 +26,7 @@ func Translate(patches jsondiff.Patch) []string {
 	return translations
 }
 
+// translateOperation helper
 func translateOperation(op jsondiff.Operation) string {
 	path := op.Path
 	opType := op.Type
@@ -42,7 +43,7 @@ func translateOperation(op jsondiff.Operation) string {
 	}
 }
 
-// translateAdd
+// translateAdd helper
 func translateAdd(path string) string {
 	pathLower := strings.ToLower(path)
 
@@ -67,7 +68,7 @@ func translateAdd(path string) string {
 	return "New capability/argument added."
 }
 
-// translateRemove
+// translateRemove helper
 func translateRemove(path string) string {
 	pathLower := strings.ToLower(path)
 
@@ -91,7 +92,7 @@ func translateRemove(path string) string {
 	return "Capability removed."
 }
 
-// translateReplace
+// translateReplace helper
 func translateReplace(path string) string {
 	pathLower := strings.ToLower(path)
 
@@ -113,7 +114,7 @@ func translateReplace(path string) string {
 	return "Capability modified."
 }
 
-// SeverityLevel 0=safe, 1=mod, 2=crit
+// SeverityLevel enum
 type SeverityLevel int
 
 const (
@@ -122,11 +123,11 @@ const (
 	SeverityCritical
 )
 
-// GetSeverity
+// GetSeverity from translation
 func GetSeverity(translation string) SeverityLevel {
 	lowerMsg := strings.ToLower(translation)
 
-	// Critical changes (Red)
+	// Critical (Red)
 	if strings.Contains(translation, "⚠️") ||
 		strings.Contains(translation, "CRITICAL") ||
 		strings.Contains(lowerMsg, "removed") ||
@@ -134,11 +135,11 @@ func GetSeverity(translation string) SeverityLevel {
 		return SeverityCritical
 	}
 
-	// Safe changes (Green)
+	// Safe (Green)
 	if strings.Contains(lowerMsg, "documentation") {
 		return SeveritySafe
 	}
 
-	// Everything else is moderate (Yellow)
+	// Moderate (Yellow)
 	return SeverityModerate
 }

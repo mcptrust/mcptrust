@@ -1,0 +1,43 @@
+# MCPTrust Lock - Minimal Example
+#
+# Creates a lockfile from an MCP server's current state.
+# Run manually or on push to update the lockfile.
+#
+# Usage:
+#   1. Copy this file to .github/workflows/mcptrust-lock.yml
+#   2. Update server_command to your MCP server
+#   3. Run workflow to generate mcp-lock.json
+
+name: MCPTrust Lock
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'mcp-lock.json'
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
+
+      - name: MCPTrust Lock
+        uses: mcptrust/mcptrust/.github/actions/mcptrust@b020fc206b0b45c51209f4a7e9e1172a8f412f53 # v0.1.1
+        id: mcptrust
+        with:
+          mode: lock
+          server_command: 'npx -y @modelcontextprotocol/server-filesystem /tmp'
+          pin: 'true'
+          verify_provenance: 'false'
+          preset: baseline
+
+      # Optional: Upload artifacts for inspection
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        with:
+          name: mcptrust-lock
+          path: |
+            ${{ steps.mcptrust.outputs.lockfile_path }}
+            ${{ steps.mcptrust.outputs.receipt_path }}

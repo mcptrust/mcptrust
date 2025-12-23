@@ -1,0 +1,35 @@
+# MCPTrust Check - Quick Start
+#
+# Drop-in workflow to verify MCP server against committed lockfile on PRs.
+# Produces readable step summary. No write permissions needed for basic usage.
+#
+# Usage:
+#   1. Copy to .github/workflows/mcptrust.yml
+#   2. Update server_command to your MCP server
+#   3. Commit mcp-lock.json (run: mcptrust lock -- "your-server-command")
+#
+# See: https://github.com/mcptrust/mcptrust
+
+name: MCPTrust
+
+on: [pull_request]
+
+# Least-privilege: only read access needed for step_summary mode
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
+
+      # Pin to a version tag for security tooling
+      - uses: mcptrust/mcptrust/.github/actions/mcptrust@b020fc206b0b45c51209f4a7e9e1172a8f412f53 # v0.1.1
+        with:
+          mode: check
+          lockfile: mcp-lock.json
+          fail_on: critical
+          policy: baseline
+          server_command: 'npx -y @modelcontextprotocol/server-filesystem /tmp'
+          report: step_summary

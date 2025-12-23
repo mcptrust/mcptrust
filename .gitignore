@@ -15,3 +15,5 @@ mcp-lock.json
 # Test/smoke outputs
 /tmp/
 *.log
+
+.venv/

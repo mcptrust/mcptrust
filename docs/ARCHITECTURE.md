@@ -116,7 +116,7 @@
 - **Output**: `mcp-lock.json` file
   ```json
   {
-    "version": "1.0",
+    "version": "3.0",
     "server_command": "...",
     "tools": {
       "tool_name": {

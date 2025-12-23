@@ -1,0 +1,82 @@
+name: "Strict (Fail-Closed)"
+mode: strict
+
+rules:
+  - name: "artifact_pinned_required"
+    expr: 'has(input.artifact) && input.artifact.integrity != ""'
+    failure_msg: "✗ Artifact MUST be pinned with integrity hash"
+    severity: error
+    control_refs:
+      - "NIST AI RMF: GOVERN 1.1"
+      - "SOC2: CC7.2"
+      - "ISO/IEC 42001: 8.2"
+    evidence:
+      - "Signed mcp-lock.json with integrity hash"
+      - "mcptrust receipt.json audit trail"
+    evidence_commands:
+      - "mcptrust verify --lockfile mcp-lock.json"
+      - "mcptrust artifact verify --deep mcp-lock.json"
+
+  - name: "provenance_required"
+    expr: 'has(input.artifact) && has(input.artifact.provenance) && input.artifact.provenance.verified == true'
+    failure_msg: "✗ Provenance attestation MUST be verified"
+    severity: error
+    control_refs:
+      - "NIST AI RMF: MAP 1.1"
+      - "SLSA: Build L3"
+      - "EU AI Act: Article 11"
+    evidence:
+      - "SLSA provenance attestation verified via cosign"
+      - "Build provenance in mcp-lock.json"
+    evidence_commands:
+      - "mcptrust lock --pin --verify-provenance -- <server command>"
+      - "mcptrust artifact provenance mcp-lock.json"
+
+  - name: "no_high_risk_tools"
+    expr: '!input.tools.exists(t, t.risk_level == "HIGH")'
+    failure_msg: "✗ High-risk tools are not permitted in strict mode"
+    severity: error
+    control_refs:
+      - "NIST AI RMF: MEASURE 2.3"
+      - "ISO/IEC 42001: 9.2"
+    evidence:
+      - "mcptrust scan output with risk classification"
+      - "Policy check pass/fail result"
+    evidence_commands:
+      - "mcptrust scan -- <server command>"
+      - "mcptrust policy check --preset strict --lockfile mcp-lock.json -- <server command>"
+
+  - name: "tools_exist"
+    expr: "size(input.tools) > 0"
+    failure_msg: "✗ Server must expose at least one tool"
+    severity: error
+    control_refs:
+      - "NIST AI RMF: GOVERN 2.1"
+    evidence:
+      - "mcptrust scan output listing tools"
+    evidence_commands:
+      - "mcptrust scan -- <server command>"
+
+  - name: "no_critical_drift"
+    expr: '!has(input.drift) || !input.drift.hasDrift || !input.drift.items.exists(x, x.severity == "critical")'
+    failure_msg: "✗ CRITICAL drift detected — lockfile is out of sync with server"
+    severity: error
+    control_refs:
+      - "NIST AI RMF: GOVERN 1.2"
+      - "SOC2: CC6.1"
+    evidence:
+      - "mcptrust check output showing drift items"
+    evidence_commands:
+      - "mcptrust check --lock mcp-lock.json -- <server command>"
+
+  - name: "no_file_scheme"
+    expr: '!has(input.resources) || !has(input.resources.schemes) || !("file" in input.resources.schemes)'
+    failure_msg: "✗ file:// scheme is not allowed in strict mode — use restricted URI patterns"
+    severity: error
+    control_refs:
+      - "NIST AI RMF: GOVERN 1.2"
+      - "CIS Controls: 3.3"
+    evidence:
+      - "Resource template listing with schemes"
+    evidence_commands:
+      - "mcptrust scan -- <server command>"

@@ -2,23 +2,18 @@
 
 .PHONY: build test smoke clean
 
-# build
-build:
+# build binary
 	go build -o mcptrust ./cmd/mcptrust
 
-# tests
-test:
+# unit tests
 	go test ./...
 
-# integration
-gauntlet:
+# integration tests
 	bash tests/gauntlet.sh
 
-# smoke (Ed25519)
-smoke: build
+# smoke test
 	MCPTRUST_BIN=./mcptrust bash scripts/smoke.sh
 
-# clean
-clean:
+# cleanup
 	rm -f mcptrust
 	rm -rf bin/

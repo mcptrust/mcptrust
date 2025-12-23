@@ -1,0 +1,28 @@
+{
+  "version": "2.0",
+  "server_command": "npx -y @test/server /tmp",
+  "artifact": {
+    "type": "npm",
+    "name": "@test/server",
+    "version": "1.0.0",
+    "registry": "https://registry.npmjs.org",
+    "integrity": "sha512-abc123def456789012345678901234567890123456789012345678901234567890123456==",
+    "provenance": {
+      "method": "cosign_slsa",
+      "predicate_type": "https://slsa.dev/provenance/v1",
+      "builder_id": "https://github.com/actions/runner",
+      "source_repo": "https://github.com/test/server",
+      "source_ref": "refs/tags/v1.0.0",
+      "workflow_uri": ".github/workflows/release.yml",
+      "verified": true,
+      "verified_at": "2024-01-15T10:30:00Z"
+    }
+  },
+  "tools": {
+    "read_file": {
+      "description_hash": "sha256:abc123",
+      "input_schema_hash": "sha256:def456",
+      "risk_level": "LOW"
+    }
+  }
+}

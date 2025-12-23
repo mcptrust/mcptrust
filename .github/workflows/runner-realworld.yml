@@ -1,0 +1,127 @@
+name: Runner Real-World Tests
+
+# This workflow runs real-world tests against actual npm packages to catch
+# upstream tool and provenance changes that fixture-mode tests cannot detect.
+# It is NOT part of required CI and is meant to be run on-demand or nightly.
+
+on:
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Enable debug output'
+        required: false
+        default: false
+        type: boolean
+  # Uncomment for nightly runs (optional, may be flaky due to upstream changes):
+  # schedule:
+  #   - cron: '0 3 * * *'  # 3 AM UTC daily
+
+permissions:
+  contents: read
+
+jobs:
+  realworld-npm:
+    name: Real-World npm Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
+
+      # Pin specific Go version for reproducibility
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.2.0
+        with:
+          go-version: '1.21.x'
+
+      # Pin specific Node.js version for npm behavior consistency
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.2.0
+        with:
+          node-version: '20.10.0'  # LTS version with known npm behavior
+
+      # Pin cosign version - update this periodically after testing
+      - name: Install cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+        with:
+          cosign-release: 'v2.4.1'  # Required for verify-blob-attestation features
+
+      - name: Check tool versions
+        run: |
+          echo "=== Tool Versions ==="
+          go version
+          node --version
+          npm --version
+          cosign version
+
+      - name: Build mcptrust
+        run: go build -o mcptrust ./cmd/mcptrust
+
+      - name: Test 1 - Lock with artifact pinning
+        run: |
+          echo "=== Testing lock --pin ==="
+          ./mcptrust lock --pin -- "npx -y @modelcontextprotocol/server-filesystem /tmp"
+          cat mcp-lock.json
+          echo ""
+          echo "✓ Lock with pinning succeeded"
+
+      - name: Test 2 - Lock with provenance verification
+        run: |
+          echo "=== Testing lock --pin --verify-provenance ==="
+          rm -f mcp-lock.json
+          ./mcptrust lock --pin --verify-provenance -- "npx -y @modelcontextprotocol/server-filesystem /tmp" || echo "⚠️ Provenance verification may have failed (expected if package lacks attestations)"
+          if [ -f mcp-lock.json ]; then
+            cat mcp-lock.json
+            echo ""
+            echo "✓ Lock created"
+          fi
+
+      - name: Test 3 - Artifact verify
+        run: |
+          echo "=== Testing artifact verify ==="
+          if [ -f mcp-lock.json ]; then
+            ./mcptrust artifact verify mcp-lock.json
+            echo "✓ Artifact verification succeeded"
+          else
+            echo "⚠️ Skipping - no lockfile"
+          fi
+
+      - name: Test 4 - Dry run execution
+        run: |
+          echo "=== Testing run --dry-run ==="
+          if [ -f mcp-lock.json ]; then
+            ./mcptrust run --dry-run --lock mcp-lock.json --require-provenance=false || {
+              echo "⚠️ Dry run failed - this may indicate npm or provenance changes"
+              exit 1
+            }
+            echo "✓ Dry run succeeded"
+          else
+            echo "⚠️ Skipping - no lockfile"
+          fi
+
+      - name: Test 5 - Policy check with baseline preset
+        run: |
+          echo "=== Testing policy check --preset baseline ==="
+          ./mcptrust policy check --preset baseline -- "npx -y @modelcontextprotocol/server-filesystem /tmp"
+          echo "✓ Baseline policy check succeeded"
+
+      - name: Upload lockfile artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        if: always()
+        with:
+          name: mcp-lock-realworld
+          path: mcp-lock.json
+          if-no-files-found: ignore
+
+      - name: Summary
+        run: |
+          echo "## Real-World Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All real-world tests completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Purpose" >> $GITHUB_STEP_SUMMARY
+          echo "These tests verify mcptrust works with real npm packages and their" >> $GITHUB_STEP_SUMMARY
+          echo "current provenance attestations. Failures may indicate:" >> $GITHUB_STEP_SUMMARY
+          echo "- Upstream npm package changes" >> $GITHUB_STEP_SUMMARY
+          echo "- npm CLI behavior changes" >> $GITHUB_STEP_SUMMARY
+          echo "- Sigstore/cosign changes" >> $GITHUB_STEP_SUMMARY
+          echo "- Provenance attestation format changes" >> $GITHUB_STEP_SUMMARY
