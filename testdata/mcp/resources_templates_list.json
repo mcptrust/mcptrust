@@ -1,0 +1,23 @@
+{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+        "resourceTemplates": [
+            {
+                "uriTemplate": "file:///{path}",
+                "name": "Project Files",
+                "description": "Access files in the project directory",
+                "mimeType": "application/octet-stream"
+            },
+            {
+                "uriTemplate": "db://table/{table_name}",
+                "name": "Database Tables",
+                "description": "Access database table contents"
+            },
+            {
+                "uriTemplate": "api://endpoint/{endpoint_path}",
+                "name": "API Endpoints"
+            }
+        ]
+    }
+}

@@ -1,0 +1,540 @@
+name: 'MCPTrust'
+description: 'Lock or check MCP server capabilities with cryptographic integrity'
+author: 'mcptrust'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  mode:
+    description: 'Operation mode: lock or check'
+    required: false
+    default: 'check'
+  server_command:
+    description: 'MCP server command (shell-parsed). For safe parsing, use server_argv instead.'
+    required: false
+    default: ''
+  server_argv:
+    description: 'MCP server command as multiline argv (one token per line). Safer than server_command.'
+    required: false
+    default: ''
+  lockfile:
+    description: 'Path to lockfile'
+    required: false
+    default: 'mcp-lock.json'
+  fail_on:
+    description: 'Severity threshold for check failure: critical (default), moderate, or info'
+    required: false
+    default: 'critical'
+  policy:
+    description: 'Policy preset (baseline, strict) or path to YAML file. Empty disables policy.'
+    required: false
+    default: ''
+  report:
+    description: 'Reporting mode: step_summary (default), pr_comment, both, or none'
+    required: false
+    default: 'step_summary'
+  redact:
+    description: 'Redact hashes/URIs in reports. Messages are always scrubbed for secrets.'
+    required: false
+    default: 'true'
+  upload_artifacts:
+    description: 'Upload check.json and summary.md as workflow artifacts'
+    required: false
+    default: 'true'
+  preset:
+    description: 'DEPRECATED: Use policy instead. Policy preset for check mode.'
+    required: false
+    default: ''
+  pin:
+    description: 'Pin artifact in lock mode'
+    required: false
+    default: 'true'
+  verify_provenance:
+    description: 'Verify provenance in lock mode'
+    required: false
+    default: 'false'
+  require_provenance:
+    description: 'Require provenance in run/check (if supported)'
+    required: false
+    default: 'false'
+  receipt:
+    description: 'Receipt output path'
+    required: false
+    default: '.mcptrust/receipts.jsonl'
+  receipt_mode:
+    description: 'Receipt mode: overwrite or append'
+    required: false
+    default: 'append'
+  log_format:
+    description: 'Log format: pretty or jsonl'
+    required: false
+    default: 'jsonl'
+  log_level:
+    description: 'Log level: debug, info, warn, error'
+    required: false
+    default: 'info'
+  log_output:
+    description: 'Log output: stderr or file path'
+    required: false
+    default: 'stderr'
+  install_method:
+    description: 'Install method: go-install, release, or build'
+    required: false
+    default: 'go-install'
+  go_version:
+    description: 'Go version for go-install or build method'
+    required: false
+    default: '1.24.x'
+  install_ref:
+    description: 'Git ref for go install (tag, branch, or SHA)'
+    required: false
+    default: 'main'
+  mcptrust_bin:
+    description: 'Path to mcptrust binary (skips install if provided)'
+    required: false
+    default: ''
+
+outputs:
+  lockfile_path:
+    description: 'Resolved lockfile path'
+    value: ${{ steps.set-outputs.outputs.lockfile_path }}
+  receipt_path:
+    description: 'Receipt file path'
+    value: ${{ steps.set-outputs.outputs.receipt_path }}
+  outcome:
+    description: 'Check result: PASS or FAIL'
+    value: ${{ steps.check.outputs.outcome }}
+  check_json_path:
+    description: 'Path to raw JSON check output'
+    value: ${{ steps.set-outputs.outputs.check_json_path }}
+  summary_path:
+    description: 'Path to generated markdown summary'
+    value: ${{ steps.set-outputs.outputs.summary_path }}
+
+runs:
+  using: 'composite'
+  steps:
+    # Step 1: Validate inputs
+    - name: Validate inputs
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ -z "${{ inputs.server_command }}" && -z "${{ inputs.server_argv }}" ]]; then
+          echo "::error::Either server_command or server_argv must be provided"
+          exit 1
+        fi
+
+    - name: Setup Go
+      if: (inputs.install_method == 'go-install' || inputs.install_method == 'build') && inputs.mcptrust_bin == ''
+      uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.0.0
+      with:
+        go-version: ${{ inputs.go_version }}
+
+    # Step 3: Setup Node.js (for report generator)
+    - name: Setup Node.js
+      if: inputs.mode == 'check'
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.2.0
+      with:
+        node-version: '20'
+
+
+
+    # Step 4: Install mcptrust
+    - name: Install mcptrust
+      if: inputs.mcptrust_bin == ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "DEBUG: Entering Install mcptrust step. Method: ${{ inputs.install_method }}"
+        if [[ "${{ inputs.install_method }}" == "go-install" ]]; then
+          echo "Installing mcptrust via go install..."
+          go install github.com/mcptrust/mcptrust/cmd/mcptrust@${{ inputs.install_ref }}
+          MCPTRUST_BIN="$(go env GOPATH)/bin/mcptrust"
+        elif [[ "${{ inputs.install_method }}" == "build" ]]; then
+          echo "Building mcptrust from source..."
+          go build -v -o /tmp/mcptrust ./cmd/mcptrust
+          MCPTRUST_BIN="/tmp/mcptrust"
+        elif [[ "${{ inputs.install_method }}" == "release" ]]; then
+          echo "Installing mcptrust from GitHub release..."
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            x86_64) ARCH="amd64" ;;
+            aarch64|arm64) ARCH="arm64" ;;
+          esac
+          
+          VERSION="${{ inputs.install_ref }}"
+          if [[ "$VERSION" == "main" || "$VERSION" == "latest" ]]; then
+            RELEASE_URL="https://github.com/mcptrust/mcptrust/releases/latest/download/mcptrust-${OS}-${ARCH}"
+            CHECKSUMS_URL="https://github.com/mcptrust/mcptrust/releases/latest/download/checksums.txt"
+          else
+            RELEASE_URL="https://github.com/mcptrust/mcptrust/releases/download/${VERSION}/mcptrust-${OS}-${ARCH}"
+            CHECKSUMS_URL="https://github.com/mcptrust/mcptrust/releases/download/${VERSION}/checksums.txt"
+          fi
+          
+          echo "Downloading from: $RELEASE_URL"
+          curl -fsSL -o /tmp/mcptrust "$RELEASE_URL" || {
+            echo "::error::Failed to download mcptrust release. Release may not exist for $VERSION"
+            exit 1
+          }
+
+          echo "Downloading checksums from: $CHECKSUMS_URL"
+          curl -fsSL -o /tmp/checksums.txt "$CHECKSUMS_URL" || {
+            echo "::error::Checksums not found for release $VERSION - aborting verification (Fail-Closed)"
+            exit 1
+          }
+
+          if [[ -f "/tmp/checksums.txt" ]]; then
+            echo "Verifying checksum..."
+            # Extract expected checksum for our binary
+            # Strict parsing: 64-char hex start, whitespace, exact filename end
+            EXPECTED_SHA=$(grep -E "^[a-f0-9]{64}[[:space:]]+mcptrust-${OS}-${ARCH}$" /tmp/checksums.txt | awk '{print $1}')
+            
+            if [[ -z "$EXPECTED_SHA" ]]; then
+               echo "::error::No checksum found for mcptrust-${OS}-${ARCH} in checksums.txt"
+               exit 1
+            else
+               # Calculate actual checksum (portable)
+               if command -v sha256sum >/dev/null 2>&1; then
+                 ACTUAL_SHA=$(sha256sum /tmp/mcptrust | awk '{print $1}')
+               elif command -v shasum >/dev/null 2>&1; then
+                 ACTUAL_SHA=$(shasum -a 256 /tmp/mcptrust | awk '{print $1}')
+               else
+                 echo "::error::No sha256sum or shasum found"
+                 exit 1
+               fi
+
+               if [[ "$EXPECTED_SHA" != "$ACTUAL_SHA" ]]; then
+                 echo "::error::Checksum verification failed!"
+                 echo "Expected: $EXPECTED_SHA"
+                 echo "Actual:   $ACTUAL_SHA"
+                 exit 1
+               fi
+               echo "✓ Checksum matched: $ACTUAL_SHA"
+            fi
+          else
+            # Redundant safety check: verify fallback if download failed but somehow we got here
+            echo "::error::Checksum file missing after download step."
+            exit 1
+          fi
+
+          chmod +x /tmp/mcptrust
+          MCPTRUST_BIN="/tmp/mcptrust"
+        else
+          echo "::error::Unknown install_method: ${{ inputs.install_method }}"
+          exit 1
+        fi
+        
+        echo "MCPTRUST_BIN=$MCPTRUST_BIN" >> $GITHUB_ENV
+        echo "mcptrust installed at: $MCPTRUST_BIN"
+        $MCPTRUST_BIN --version
+
+    # Step 4b: Use provided binary
+    - name: Use provided mcptrust binary
+      if: inputs.mcptrust_bin != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        MCPTRUST_BIN="${{ inputs.mcptrust_bin }}"
+        if [[ ! -x "$MCPTRUST_BIN" ]]; then
+          echo "::error::Provided mcptrust_bin is not executable: $MCPTRUST_BIN"
+          exit 1
+        fi
+        echo "MCPTRUST_BIN=$MCPTRUST_BIN" >> $GITHUB_ENV
+        echo "Using provided binary: $MCPTRUST_BIN"
+        $MCPTRUST_BIN --version
+
+    # Step 5: Ensure directories exist
+    - name: Ensure directories
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p .mcptrust
+        RECEIPT_DIR=$(dirname "${{ inputs.receipt }}")
+        mkdir -p "$RECEIPT_DIR"
+        LOCKFILE_DIR=$(dirname "${{ inputs.lockfile }}")
+        mkdir -p "$LOCKFILE_DIR" 2>/dev/null || true
+
+    # Step 6: Run mode=lock
+    - name: MCPTrust Lock
+      if: inputs.mode == 'lock'
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "Running mcptrust lock..."
+        
+        ARGS=(
+          "lock"
+          "--v3"
+          "--log-format=${{ inputs.log_format }}"
+          "--log-level=${{ inputs.log_level }}"
+          "--log-output=${{ inputs.log_output }}"
+          "--receipt" "${{ inputs.receipt }}"
+          "--receipt-mode" "${{ inputs.receipt_mode }}"
+        )
+        
+        if [[ "${{ inputs.pin }}" == "true" ]]; then
+          ARGS+=("--pin")
+        fi
+        
+        if [[ "${{ inputs.verify_provenance }}" == "true" ]]; then
+          ARGS+=("--verify-provenance")
+        fi
+        
+        ARGS+=("--")
+        
+        if [[ -n "${{ inputs.server_argv }}" ]]; then
+          mapfile -t SERVER_ARGS <<< "${{ inputs.server_argv }}"
+          echo "Command: $MCPTRUST_BIN ${ARGS[*]} ${SERVER_ARGS[*]}"
+          "$MCPTRUST_BIN" "${ARGS[@]}" "${SERVER_ARGS[@]}"
+        else
+          SERVER_CMD="${{ inputs.server_command }}"
+          echo "Command: $MCPTRUST_BIN ${ARGS[*]} $SERVER_CMD"
+          "$MCPTRUST_BIN" "${ARGS[@]}" $SERVER_CMD
+        fi
+        
+        if [[ "${{ inputs.lockfile }}" != "mcp-lock.json" ]]; then
+          if [[ -f "mcp-lock.json" ]]; then
+            echo "Copying lockfile to ${{ inputs.lockfile }}"
+            cp -f "mcp-lock.json" "${{ inputs.lockfile }}"
+          fi
+        fi
+        
+        if [[ ! -f "${{ inputs.lockfile }}" ]]; then
+          echo "::error::Lockfile not created at ${{ inputs.lockfile }}"
+          exit 1
+        fi
+        echo "✓ Lockfile created: ${{ inputs.lockfile }}"
+
+    # Step 7: Run mode=check (unified v3 check command)
+    # IMPORTANT: Captures exit code and continues so summary is always generated
+    - name: MCPTrust Check
+      id: check
+      if: inputs.mode == 'check'
+      shell: bash
+      run: |
+        echo "Running mcptrust check..."
+        
+        # Resolve policy (support deprecated 'preset' input)
+        POLICY="${{ inputs.policy }}"
+        if [[ -z "$POLICY" && -n "${{ inputs.preset }}" ]]; then
+          POLICY="${{ inputs.preset }}"
+        fi
+        
+        ARGS=(
+          "check"
+          "--lock" "${{ inputs.lockfile }}"
+          "--format=json"
+          "--fail-on=${{ inputs.fail_on }}"
+          "--log-format=${{ inputs.log_format }}"
+          "--log-level=${{ inputs.log_level }}"
+          "--log-output=${{ inputs.log_output }}"
+          "--receipt" "${{ inputs.receipt }}"
+          "--receipt-mode" "${{ inputs.receipt_mode }}"
+        )
+        
+        if [[ -n "$POLICY" ]]; then
+          ARGS+=("--policy=$POLICY")
+        fi
+        
+        ARGS+=("--")
+        
+        # Build server command
+        if [[ -n "${{ inputs.server_argv }}" ]]; then
+          mapfile -t SERVER_ARGS <<< "${{ inputs.server_argv }}"
+          CMD_DISPLAY="$MCPTRUST_BIN ${ARGS[*]} ${SERVER_ARGS[*]}"
+        else
+          SERVER_CMD="${{ inputs.server_command }}"
+          CMD_DISPLAY="$MCPTRUST_BIN ${ARGS[*]} $SERVER_CMD"
+        fi
+        
+        echo "Command: $CMD_DISPLAY"
+        
+        # Run check and capture exit code (always continue to generate summary)
+        set +e
+        if [[ -n "${{ inputs.server_argv }}" ]]; then
+          mapfile -t SERVER_ARGS <<< "${{ inputs.server_argv }}"
+          "$MCPTRUST_BIN" "${ARGS[@]}" "${SERVER_ARGS[@]}" > .mcptrust/check.json 2>&1
+        else
+          "$MCPTRUST_BIN" "${ARGS[@]}" $SERVER_CMD > .mcptrust/check.json 2>&1
+        fi
+        MCPTRUST_EXIT=$?
+        set -e
+        
+        echo "check_exit_code=$MCPTRUST_EXIT" >> $GITHUB_OUTPUT
+        
+        # Determine outcome from JSON if possible, otherwise from exit code
+        if jq -e '.outcome' .mcptrust/check.json > /dev/null 2>&1; then
+          OUTCOME=$(jq -r '.outcome' .mcptrust/check.json)
+        else
+          if [[ "$MCPTRUST_EXIT" == "0" ]]; then
+            OUTCOME="PASS"
+          else
+            OUTCOME="FAIL"
+          fi
+        fi
+        
+        echo "outcome=$OUTCOME" >> $GITHUB_OUTPUT
+        echo "Check outcome: $OUTCOME (exit code: $MCPTRUST_EXIT)"
+        
+        # DO NOT exit here - let summary be generated first
+
+    # Step 8: Generate report (always runs for check mode, even on failure)
+    # SEC-01 FIX: Script is resolved ONLY from github.action_path, no fallback
+    - name: Generate Report
+      if: inputs.mode == 'check'
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        # redact flag controls hashes/URIs; messages are ALWAYS scrubbed
+        REDACT_FLAG=""
+        if [[ "${{ inputs.redact }}" == "true" ]]; then
+          REDACT_FLAG="--redact=true"
+        else
+          REDACT_FLAG="--redact=false"
+        fi
+        
+        # SEC-01 FIX: Derive script path from github.action_path ONLY
+        # Action is at: .github/actions/mcptrust/
+        # Scripts at:   scripts/ci/
+        # Correct traversal: ../../../scripts/ci (NOT the old ../../)
+        SCRIPT_PATH="${{ github.action_path }}/../../../scripts/ci/report.js"
+        
+        # Resolve to canonical absolute path
+        if [[ -f "$SCRIPT_PATH" ]]; then
+          SCRIPT_PATH="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)/$(basename "$SCRIPT_PATH")"
+        fi
+        
+        # SEC-01: Hard fail if missing - NO fallback to $GITHUB_WORKSPACE or anywhere else
+        if [[ ! -f "$SCRIPT_PATH" ]]; then
+          echo "::error::Trusted report.js not found at: $SCRIPT_PATH"
+          echo "::error::Expected relative to action: ../../../scripts/ci/report.js"
+          exit 1
+        fi
+        
+        OUTCOME="${{ steps.check.outputs.outcome }}"
+        
+        # Single execution path - only the trusted script
+        if node "$SCRIPT_PATH" .mcptrust/check.json $REDACT_FLAG --output=.mcptrust/summary.md 2>/dev/null; then
+          echo "Report generated: .mcptrust/summary.md"
+        else
+          echo "::warning::Report generator failed, creating fallback summary"
+          echo "## ❌ MCPTrust check: $OUTCOME" > .mcptrust/summary.md
+          echo "" >> .mcptrust/summary.md
+          echo "Report generation failed (invalid JSON or script error)." >> .mcptrust/summary.md
+          echo "" >> .mcptrust/summary.md
+          echo "See \`mcptrust-check.json\` artifact for raw output." >> .mcptrust/summary.md
+        fi
+
+    # Step 9: Write Step Summary (always runs for check mode)
+    - name: Write Step Summary
+      if: inputs.mode == 'check' && (inputs.report == 'step_summary' || inputs.report == 'both')
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ -f ".mcptrust/summary.md" ]]; then
+          cat .mcptrust/summary.md >> $GITHUB_STEP_SUMMARY
+          echo "Step summary written"
+        fi
+
+    # Step 10: Post PR Comment (if enabled and safe - uses sticky marker for idempotent updates)
+    # SECURITY: Only runs on 'pull_request' event, NOT 'pull_request_target'
+    # pull_request_target has elevated privileges and should not be used without explicit opt-in
+    - name: Post PR Comment
+      if: |
+        inputs.mode == 'check' && 
+        (inputs.report == 'pr_comment' || inputs.report == 'both') &&
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.fork == false
+
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.0.1
+      continue-on-error: true
+      with:
+        script: |
+          const fs = require('fs');
+          
+          let body;
+          try {
+            body = fs.readFileSync('.mcptrust/summary.md', 'utf8');
+          } catch (e) {
+            console.log('No summary file found, skipping PR comment');
+            return;
+          }
+          
+          // Add sticky marker for idempotent updates (find-and-update, not spam)
+          const marker = '<!-- mcptrust-report -->';
+          body = marker + '\n' + body;
+          
+          // Find existing comment with marker
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            per_page: 100,
+          });
+          
+          const existingComment = comments.find(c => c.body && c.body.includes(marker));
+          
+          if (existingComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingComment.id,
+              body: body,
+            });
+            console.log('Updated existing MCPTrust comment');
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body,
+            });
+            console.log('Created new MCPTrust comment');
+          }
+
+    # Step 11: Skip PR Comment message for forks
+    - name: Skip PR Comment (Fork)
+      if: |
+        inputs.mode == 'check' && 
+        (inputs.report == 'pr_comment' || inputs.report == 'both') &&
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.fork == true
+      shell: bash
+      run: |
+        echo "⚠️ Skipping PR comment for fork PR (security: no write access on forks)"
+        echo "Step summary is still available in the Actions tab."
+
+    # Step 12: Upload artifacts (if enabled)
+    - name: Upload MCPTrust Artifacts
+      if: inputs.mode == 'check' && inputs.upload_artifacts == 'true'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+      continue-on-error: true
+      with:
+        name: mcptrust-results
+        path: |
+          .mcptrust/check.json
+          .mcptrust/summary.md
+        retention-days: 30
+
+    # Step 13: Set outputs
+    - name: Set outputs
+      id: set-outputs
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "lockfile_path=${{ inputs.lockfile }}" >> $GITHUB_OUTPUT
+        echo "receipt_path=${{ inputs.receipt }}" >> $GITHUB_OUTPUT
+        echo "check_json_path=.mcptrust/check.json" >> $GITHUB_OUTPUT
+        echo "summary_path=.mcptrust/summary.md" >> $GITHUB_OUTPUT
+
+    # Step 14: Fail job if check failed (AFTER summary is generated)
+    - name: Fail if Check Failed
+      if: inputs.mode == 'check' && steps.check.outputs.outcome == 'FAIL'
+      shell: bash
+      run: |
+        echo "::error::MCPTrust check failed"
+        exit 1

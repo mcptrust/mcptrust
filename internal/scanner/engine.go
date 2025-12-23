@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -15,12 +17,21 @@ import (
 )
 
 const (
-	// DefaultTimeout default
+	// DefaultTimeout
 	DefaultTimeout = 10 * time.Second
 
 	// MCPProtocolVersion supported
 	MCPProtocolVersion = "2024-11-05"
+
+	// maxPaginationPages limit
+	maxPaginationPages = 100
+
+	// MaxScanItemsTotal limit (SEC-03 DoS prevention)
+	MaxScanItemsTotal = 10_000
 )
+
+// ErrScanLimitExceeded error
+var ErrScanLimitExceeded = errors.New("scan limit exceeded: too many items accumulated")
 
 // dangerousKeywords flag risky tools
 var dangerousKeywords = []string{
@@ -29,7 +40,7 @@ var dangerousKeywords = []string{
 	"eval", "system", "popen", "subprocess", "terminal",
 }
 
-// Engine MCP client
+// Engine client
 type Engine struct {
 	cmd       *exec.Cmd
 	stdin     io.WriteCloser
@@ -50,9 +61,9 @@ func NewEngine(timeout time.Duration) *Engine {
 	}
 }
 
-// Connect starts process
+// Connect to server
 func (e *Engine) Connect(ctx context.Context, command string) error {
-	// parse cmd
+	// Parse
 	parts := parseCommand(command)
 	if len(parts) == 0 {
 		return fmt.Errorf("empty command")
@@ -115,7 +126,7 @@ func (e *Engine) Initialize(ctx context.Context) (*models.ServerInfo, error) {
 		return nil, fmt.Errorf("empty initialize response")
 	}
 
-	// Send initialized notification
+	// Notify initialized
 	notification := models.MCPNotification{
 		JSONRPC: "2.0",
 		Method:  "notifications/initialized",
@@ -131,7 +142,7 @@ func (e *Engine) Initialize(ctx context.Context) (*models.ServerInfo, error) {
 	}, nil
 }
 
-// ListTools list tools
+// ListTools
 func (e *Engine) ListTools(ctx context.Context) ([]models.MCPTool, error) {
 	req := models.MCPListRequest{
 		JSONRPC: "2.0",
@@ -155,7 +166,7 @@ func (e *Engine) ListTools(ctx context.Context) ([]models.MCPTool, error) {
 	return resp.Result.Tools, nil
 }
 
-// ListResources list resources
+// ListResources
 func (e *Engine) ListResources(ctx context.Context) ([]models.MCPResource, error) {
 	req := models.MCPListRequest{
 		JSONRPC: "2.0",
@@ -180,7 +191,121 @@ func (e *Engine) ListResources(ctx context.Context) ([]models.MCPResource, error
 	return resp.Result.Resources, nil
 }
 
-// Close stop server
+// ListPrompts (paginated)
+func (e *Engine) ListPrompts(ctx context.Context) ([]models.Prompt, error) {
+	var allPrompts []models.Prompt
+	var cursor string
+	var seenCursors = make(map[string]bool)
+
+	for page := 0; page < maxPaginationPages; page++ {
+		req := models.MCPListRequest{
+			JSONRPC: "2.0",
+			ID:      e.nextID(),
+			Method:  "prompts/list",
+		}
+		if cursor != "" {
+			req.Params = &models.MCPListParams{Cursor: cursor}
+		}
+
+		var resp models.MCPPromptsListResponse
+		if err := e.sendRequest(ctx, req, &resp); err != nil {
+			return nil, fmt.Errorf("prompts/list request failed: %w", err)
+		}
+
+		if resp.Error != nil {
+			// Only treat "method not found" (-32601) as unsupported
+			if resp.Error.Code == models.JSONRPCMethodNotFound {
+				return []models.Prompt{}, nil
+			}
+			return nil, fmt.Errorf("prompts/list error: %s (code: %d)", resp.Error.Message, resp.Error.Code)
+		}
+
+		if resp.Result == nil {
+			break
+		}
+
+		// SEC-03: Check limit
+		if len(allPrompts)+len(resp.Result.Prompts) > MaxScanItemsTotal {
+			return nil, fmt.Errorf("%w: prompts list accumulated %d items, limit is %d",
+				ErrScanLimitExceeded, len(allPrompts)+len(resp.Result.Prompts), MaxScanItemsTotal)
+		}
+
+		allPrompts = append(allPrompts, resp.Result.Prompts...)
+
+		// More pages?
+		if resp.Result.NextCursor == "" {
+			break
+		}
+
+		// Detect loops
+		if seenCursors[resp.Result.NextCursor] {
+			break
+		}
+		seenCursors[resp.Result.NextCursor] = true
+		cursor = resp.Result.NextCursor
+	}
+
+	return allPrompts, nil
+}
+
+// ListResourceTemplates (paginated)
+func (e *Engine) ListResourceTemplates(ctx context.Context) ([]models.ResourceTemplate, error) {
+	var allTemplates []models.ResourceTemplate
+	var cursor string
+	var seenCursors = make(map[string]bool)
+
+	for page := 0; page < maxPaginationPages; page++ {
+		req := models.MCPListRequest{
+			JSONRPC: "2.0",
+			ID:      e.nextID(),
+			Method:  "resources/templates/list",
+		}
+		if cursor != "" {
+			req.Params = &models.MCPListParams{Cursor: cursor}
+		}
+
+		var resp models.MCPResourceTemplatesListResponse
+		if err := e.sendRequest(ctx, req, &resp); err != nil {
+			return nil, fmt.Errorf("resources/templates/list request failed: %w", err)
+		}
+
+		if resp.Error != nil {
+			// Only treat "method not found" (-32601) as unsupported
+			if resp.Error.Code == models.JSONRPCMethodNotFound {
+				return []models.ResourceTemplate{}, nil
+			}
+			return nil, fmt.Errorf("resources/templates/list error: %s (code: %d)", resp.Error.Message, resp.Error.Code)
+		}
+
+		if resp.Result == nil {
+			break
+		}
+
+		// SEC-03: Check accumulation limit BEFORE appending
+		if len(allTemplates)+len(resp.Result.ResourceTemplates) > MaxScanItemsTotal {
+			return nil, fmt.Errorf("%w: resource templates list accumulated %d items, limit is %d",
+				ErrScanLimitExceeded, len(allTemplates)+len(resp.Result.ResourceTemplates), MaxScanItemsTotal)
+		}
+
+		allTemplates = append(allTemplates, resp.Result.ResourceTemplates...)
+
+		// Check for more pages
+		if resp.Result.NextCursor == "" {
+			break
+		}
+
+		// Detect cursor loops (misbehaving server)
+		if seenCursors[resp.Result.NextCursor] {
+			break
+		}
+		seenCursors[resp.Result.NextCursor] = true
+		cursor = resp.Result.NextCursor
+	}
+
+	return allTemplates, nil
+}
+
+// Close
 func (e *Engine) Close() error {
 	if e.stdin != nil {
 		e.stdin.Close()
@@ -189,7 +314,7 @@ func (e *Engine) Close() error {
 		e.stderr.Close()
 	}
 	if e.cmd != nil && e.cmd.Process != nil {
-		// Give the process a chance to exit gracefully
+		// Graceful exit?
 		done := make(chan error, 1)
 		go func() {
 			done <- e.cmd.Wait()
@@ -208,7 +333,7 @@ func (e *Engine) Close() error {
 	return nil
 }
 
-// sendRequest JSON-RPC req/resp
+// sendRequest
 func (e *Engine) sendRequest(ctx context.Context, req interface{}, resp interface{}) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -250,7 +375,7 @@ func (e *Engine) sendRequest(ctx context.Context, req interface{}, resp interfac
 	}
 }
 
-// sendNotification JSON-RPC notify
+// sendNotification
 func (e *Engine) sendNotification(notification interface{}) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -273,7 +398,7 @@ func (e *Engine) nextID() int {
 	return e.requestID
 }
 
-// parseCommand split cmd w/ quotes
+// parseCommand
 func parseCommand(command string) []string {
 	var parts []string
 	var current strings.Builder
@@ -332,7 +457,7 @@ func (ra *RiskAnalyzer) AnalyzeTools(mcpTools []models.MCPTool) []models.Tool {
 	return tools
 }
 
-// assessRisk determines the risk level based on tool name and description
+// assessRisk
 func (ra *RiskAnalyzer) assessRisk(tool models.MCPTool) (models.RiskLevel, []string) {
 	var reasons []string
 	searchText := strings.ToLower(tool.Name + " " + tool.Description)
@@ -354,13 +479,15 @@ func (ra *RiskAnalyzer) assessRisk(tool models.MCPTool) (models.RiskLevel, []str
 	}
 }
 
-// Scan runs security check
+// Scan
 func Scan(ctx context.Context, command string, timeout time.Duration) (*models.ScanReport, error) {
 	report := &models.ScanReport{
-		Timestamp: time.Now().UTC(),
-		Command:   command,
-		Tools:     []models.Tool{},
-		Resources: []models.Resource{},
+		Timestamp:         time.Now().UTC(),
+		Command:           command,
+		Tools:             []models.Tool{},
+		Resources:         []models.Resource{},
+		Prompts:           []models.Prompt{},
+		ResourceTemplates: []models.ResourceTemplate{},
 	}
 
 	// timeout ctx
@@ -404,6 +531,36 @@ func Scan(ctx context.Context, command string, timeout time.Duration) (*models.S
 			report.Resources = append(report.Resources, models.Resource(r))
 		}
 	}
+
+	// prompts
+	prompts, err := engine.ListPrompts(ctx)
+	if err != nil {
+		report.Error = fmt.Sprintf("failed to list prompts: %v", err)
+		return report, nil
+	}
+	// Sort for determinism
+	sort.Slice(prompts, func(i, j int) bool {
+		return prompts[i].Name < prompts[j].Name
+	})
+	// Sort arguments within each prompt for determinism
+	for i := range prompts {
+		sort.Slice(prompts[i].Arguments, func(a, b int) bool {
+			return prompts[i].Arguments[a].Name < prompts[i].Arguments[b].Name
+		})
+	}
+	report.Prompts = prompts
+
+	// resource templates
+	templates, err := engine.ListResourceTemplates(ctx)
+	if err != nil {
+		report.Error = fmt.Sprintf("failed to list resource templates: %v", err)
+		return report, nil
+	}
+	// Sort
+	sort.Slice(templates, func(i, j int) bool {
+		return templates[i].URITemplate < templates[j].URITemplate
+	})
+	report.ResourceTemplates = templates
 
 	return report, nil
 }

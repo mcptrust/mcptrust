@@ -1,0 +1,49 @@
+{
+  "lockFileVersion": "3.0",
+  "meta": {
+    "generator": "mcptrust test",
+    "updatedAt": "2024-01-01T00:00:00Z"
+  },
+  "server": {
+    "name": "test-server"
+  },
+  "prompts": {
+    "definitions": {
+      "code_review": {
+        "argumentsHash": "sha256:124d240a4bee4bcd7b49edda6cf3e4c131bae3d796fbc99845862073fba1ac17",
+        "descriptionHash": "sha256:1ee81f092c1d206a082f5df804f33f5c50643d307aca12ec8a0ee8c42f6aa634"
+      },
+      "summarize": {
+        "argumentsHash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "descriptionHash": "sha256:a04d95ebe29a8fe1cb065f5bff15fd68e4ff5913b122a1654b3f84493e590741"
+      },
+      "translate": {
+        "argumentsHash": "sha256:d8691d96d50a3112d4317ff44c9f76c3c30f799a83b0089d8b80eb5eb11dd70d",
+        "descriptionHash": "sha256:7439d18f7829e41fb8eee17bf6ea36b92fcf6c3c25884ad102318bc2fade522c"
+      }
+    }
+  },
+  "resources": {
+    "templates": [
+      {
+        "uriTemplate": "api://endpoint/{endpoint_path}",
+        "templateHash": "sha256:59814037f7a03e148bf4fc13a4b813dee5ecf4678286edff25962ef3527c727d",
+        "nameHash": "sha256:e85a69a745a9b5bfff92a35ed39d38f1e98f700e0266d8c15c662785da9fd479"
+      },
+      {
+        "uriTemplate": "db://table/{table_name}",
+        "templateHash": "sha256:2ff89960042e7c8a70dc4e98d3b478fc4ccc3817482834478567290b68234714",
+        "nameHash": "sha256:b1eabe4230e275612d69f96fab24eae98fdb1bc96ffcc0eedc7d481f1efb6246",
+        "descriptionHash": "sha256:7f52ac2c4a8591c1f46539bdd47c295eb619d083c6d7b1fc36fd2f6a8953644b"
+      },
+      {
+        "uriTemplate": "file:///{path}",
+        "templateHash": "sha256:44741e3b5f1bb23c0c6da3756af3ea11836a1c6b66a50b03d3cce3d2148a234b",
+        "nameHash": "sha256:be89f93f3645ec0039ace97c1919b35fc955d122e5d23af7630485ba33a39046",
+        "descriptionHash": "sha256:8f53d841b889d91a86fd25e75e2eea3e5dff9b4519dd8468d0e8011449d1eda9",
+        "mimeType": "application/octet-stream"
+      }
+    ]
+  },
+  "tools": {}
+}

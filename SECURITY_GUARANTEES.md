@@ -3,7 +3,7 @@
 This document outlines the specific security properties guaranteed by the MCPTrust toolchain when used correctly.
 
 ## 1. Integrity (The Lockfile)
-**Guarantee**: If `mcptrust verify` passes, the lockfile's **canonical form** is identical to what was signed.
+**Guarantee**: If `mcptrust verify` passes, the lockfile's **canonical form** is identical to what was signed, assuming no collision in the underlying hash function (computationally infeasible with SHA-256/Ed25519).
 
 *   **Mechanism**: Ed25519 digital signatures over canonicalized JSON.
 *   **Proof**: The `tests/gauntlet.sh` suite includes a "Tamper Detection" phase that modifies the lockfile and asserts verification failure.

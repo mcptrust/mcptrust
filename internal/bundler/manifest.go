@@ -9,7 +9,7 @@ import (
 	"sort"
 )
 
-// BundleManifest contents
+// BundleManifest struct
 type BundleManifest struct {
 	ToolVersion       string         `json:"tool_version"`
 	GoVersion         string         `json:"go_version,omitempty"`
@@ -20,14 +20,14 @@ type BundleManifest struct {
 	CanonVersion      string         `json:"canon_version,omitempty"`
 }
 
-// ManifestFile desc
+// ManifestFile details
 type ManifestFile struct {
 	Name   string `json:"name"`
 	SHA256 string `json:"sha256"`
 	Size   int64  `json:"size"`
 }
 
-// GenerateManifest for contents
+// GenerateManifest helper
 func GenerateManifest(opts BundleOptions, canonVersion string) (*BundleManifest, error) {
 	manifest := &BundleManifest{
 		ToolVersion:       getToolVersion(),

@@ -1,0 +1,202 @@
+# MCPTrust Lock and Check Workflow
+#
+# pipeline:
+# 1. check drift (vs committed lockfile)
+# 2. policy check (strict)
+# 3. lock (informational)
+# 4. pr comment (results)
+#
+# security:
+# - pull_request trigger (anti-pwnrequest)
+# - limited permissions
+# - read-only on forks
+
+name: MCPTrust Lock and Check
+
+on:
+  pull_request:
+    paths:
+      - 'mcp-lock.json'
+      - '.github/workflows/mcp-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+env:
+  SERVER_CMD: 'npx -y @modelcontextprotocol/server-filesystem /tmp'
+
+jobs:
+  mcp-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.2.0
+        with:
+          go-version: '1.21'
+
+      - name: Install MCPTrust
+        run: go install github.com/mcptrust/mcptrust/cmd/mcptrust@v0.1.1
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+
+      - name: Check for Drift
+        id: diff
+        run: |
+          set +e
+          set -o pipefail
+          mcptrust diff -- "$SERVER_CMD" 2>&1 | tee diff-output.txt
+          exit_code=${PIPESTATUS[0]}
+          set +o pipefail
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+          set -e
+
+      - name: Policy Check (Strict)
+        id: policy
+        run: |
+          set +e
+          set -o pipefail
+          mcptrust policy check --preset strict --lockfile mcp-lock.json -- "$SERVER_CMD" 2>&1 | tee policy-output.txt
+          exit_code=${PIPESTATUS[0]}
+          set +o pipefail
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+          set -e
+
+      - name: Lock with Artifact Pinning and Provenance
+        id: lock
+        run: |
+          set +e
+          set -o pipefail
+          mcptrust lock --pin --verify-provenance -- "$SERVER_CMD" 2>&1 | tee lock-output.txt
+          exit_code=${PIPESTATUS[0]}
+          set +o pipefail
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+          set -e
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+
+            const readLog = (path, maxLen = 6000) => {
+              try {
+                let content = fs.readFileSync(path, 'utf8').trim();
+                if (content.length > maxLen) {
+                  content = content.substring(0, maxLen) + '\n\n... (truncated)';
+                }
+                return content || '(no output)';
+              } catch (e) {
+                return '(file not found)';
+              }
+            };
+
+            const diffLog = readLog('diff-output.txt');
+            const policyLog = readLog('policy-output.txt');
+            const lockLog = readLog('lock-output.txt');
+
+            const diffExit = parseInt('${{ steps.diff.outputs.exit_code }}' || '0', 10);
+            const policyExit = parseInt('${{ steps.policy.outputs.exit_code }}' || '0', 10);
+            const lockExit = parseInt('${{ steps.lock.outputs.exit_code }}' || '0', 10);
+
+            const allPassed = (diffExit === 0 && policyExit === 0);
+            const statusIcon = allPassed ? '✅' : '❌';
+            const statusText = allPassed ? 'All checks passed' : 'One or more checks failed';
+
+            let failedSteps = [];
+            if (diffExit !== 0) failedSteps.push('Drift (exit ' + diffExit + ')');
+            if (policyExit !== 0) failedSteps.push('Policy (exit ' + policyExit + ')');
+            if (lockExit !== 0) failedSteps.push('Lock (exit ' + lockExit + ')');
+            const failureSummary = failedSteps.length > 0 ? '\n**Failed**: ' + failedSteps.join(', ') : '';
+
+            const serverCmd = '${{ env.SERVER_CMD }}';
+
+            const body = [
+              '<!-- mcptrust-report -->',
+              '## ' + statusIcon + ' MCPTrust Security Report',
+              '',
+              '**Status**: ' + statusText + failureSummary,
+              '**Server**: `' + serverCmd + '`',
+              '**Policy preset**: strict',
+              '',
+              '<details>',
+              '<summary>� Drift Check (exit ' + diffExit + ')</summary>',
+              '',
+              '```',
+              diffLog,
+              '```',
+              '</details>',
+              '',
+              '<details>',
+              '<summary>� Policy Check (exit ' + policyExit + ')</summary>',
+              '',
+              '```',
+              policyLog,
+              '```',
+              '</details>',
+              '',
+              '<details>',
+              '<summary>� Lock (exit ' + lockExit + ') - informational</summary>',
+              '',
+              '```',
+              lockLog,
+              '```',
+              '</details>',
+              '',
+              '---',
+              '_Generated by [MCPTrust](https://github.com/mcptrust/mcptrust)_',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+
+            const marker = '<!-- mcptrust-report -->';
+            const existingComment = comments.find(c => c.body && c.body.includes(marker));
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: body,
+              });
+              console.log('Updated existing comment ' + existingComment.id);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body,
+              });
+              console.log('Created new MCPTrust comment');
+            }
+
+      - name: Skip Comment for Fork PRs
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "⚠️ Skipping PR comment for fork PR (security: no write access on forks)"
+          echo "Checks still ran - see job output above."
+
+      - name: Fail if Checks Failed
+        run: |
+          diff_exit="${{ steps.diff.outputs.exit_code }}"
+          policy_exit="${{ steps.policy.outputs.exit_code }}"
+
+          failed=0
+          [[ "$diff_exit" != "0" ]] && echo "❌ Drift detected (exit $diff_exit)" && failed=1
+          [[ "$policy_exit" != "0" ]] && echo "❌ Policy failed (exit $policy_exit)" && failed=1
+
+          [[ "$failed" == "1" ]] && exit 1
+          echo "✅ All checks passed"

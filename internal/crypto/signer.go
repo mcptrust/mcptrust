@@ -81,7 +81,7 @@ func Sign(data []byte, privateKeyPath string) ([]byte, error) {
 	return signature, nil
 }
 
-// Verify
+// Verify signature
 func Verify(data []byte, signature []byte, publicKeyPath string) (bool, error) {
 	// load pk
 	keyData, err := os.ReadFile(publicKeyPath)

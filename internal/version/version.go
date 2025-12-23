@@ -4,10 +4,10 @@ import (
 	"runtime/debug"
 )
 
-// Swappable for testing
+// readBuildInfo hook
 var readBuildInfo = debug.ReadBuildInfo
 
-// BuildVersion returns the module version, or "dev" if unavailable.
+// BuildVersion getter
 func BuildVersion() string {
 	info, ok := readBuildInfo()
 	if !ok {

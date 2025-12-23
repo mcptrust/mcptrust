@@ -1,0 +1,29 @@
+# MCPTrust Check - Minimal Example
+#
+# Verifies MCP server against committed lockfile on pull requests.
+# Fails CI if drift is detected or policy violations occur.
+#
+# Usage:
+#   1. Copy this file to .github/workflows/mcptrust-check.yml
+#   2. Update server_command to your MCP server
+#   3. Ensure mcp-lock.json is committed to the repository
+
+name: MCPTrust Check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
+
+      - name: MCPTrust Check
+        uses: mcptrust/mcptrust/.github/actions/mcptrust@b020fc206b0b45c51209f4a7e9e1172a8f412f53 # v0.1.1
+        with:
+          mode: check
+          server_command: 'npx -y @modelcontextprotocol/server-filesystem /tmp'
+          lockfile: mcp-lock.json
+          preset: strict

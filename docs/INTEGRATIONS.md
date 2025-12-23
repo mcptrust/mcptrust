@@ -57,9 +57,9 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.2.0
         with:
           go-version: "1.22"
           cache: false
@@ -91,7 +91,7 @@ jobs:
 
       - name: Post PR comment on drift
         if: failure() && steps.diff.outputs.exit_code != '0'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.0.1
         with:
           script: |
             const fs = require('fs');

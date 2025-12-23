@@ -15,3 +15,14 @@ mcp-lock.json
 # Test/smoke outputs
 /tmp/
 *.log
+
+.venv/
+
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# allow backward compat test fixtures
+!testdata/backward_compat/*.key

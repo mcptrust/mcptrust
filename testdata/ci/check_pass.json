@@ -1,0 +1,14 @@
+{
+    "lockfileVersion": "3.0",
+    "server": "filesystem-server",
+    "lockfile": "mcp-lock.json",
+    "summary": {
+        "critical": 0,
+        "moderate": 0,
+        "info": 0,
+        "total": 0
+    },
+    "drift": [],
+    "failOn": "critical",
+    "outcome": "PASS"
+}

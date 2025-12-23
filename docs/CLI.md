@@ -257,6 +257,150 @@ mcptrust verify mcp-lock.json \
 
 ---
 
+### `proxy`
+Run as stdio enforcement proxy between host and MCP server.
+
+The proxy enforces v3 lockfile allowlists at runtime:
+- Filters tools/list, prompts/list, resources/templates/list to only show allowed items
+- Blocks tools/call, prompts/get, resources/read for non-allowlisted items
+- Runs preflight drift detection before bridging traffic
+
+```bash
+mcptrust proxy [flags] -- <server-command> [server-args...]
+```
+
+**Flags**
+
+| Flag | Default | Description |
+| :--- | :--- | :--- |
+| `--lock` | | Path to v3 lockfile (required) |
+| `-t, --timeout` | `10s` | Server startup timeout |
+| `--fail-on` | `critical` | Drift severity threshold: `critical`\|`moderate`\|`info` |
+| `--policy` | | Policy preset name (optional) |
+| `--audit-only` | `false` | Log blocked requests but allow traffic (no filtering) |
+| `--filter-only` | `false` | Filter lists but don't block calls/reads |
+| `--allow-static-resources` | `false` | Allow resources from startup resources/list |
+| `--print-effective-allowlist` | `false` | Print derived allowlist and exit |
+
+**Examples**
+```bash
+# Enforce mode (default)
+mcptrust proxy --lock mcp-lock.json -- npx -y @modelcontextprotocol/server-filesystem /tmp
+
+# Audit-only mode (log but don't block)
+mcptrust proxy --audit-only --lock mcp-lock.json -- npx -y @modelcontextprotocol/server-filesystem /tmp
+
+# Filter-only mode (filter lists, don't block calls)
+mcptrust proxy --filter-only --lock mcp-lock.json -- npx -y @modelcontextprotocol/server-filesystem /tmp
+```
+
+---
+
+### `run`
+Execute an MCP server from a verified artifact.
+
+This command ensures the executed artifact matches the pinned artifact, preventing the registry from serving unverified code.
+
+Workflow:
+1. Download artifact
+2. Verify integrity
+3. Verify provenance (unless disabled)
+4. Install from verified local tarball
+5. Execute binary directly
+
+```bash
+mcptrust run --lock <lockfile> [-- <command>]
+```
+
+**Flags**
+
+| Flag | Default | Description |
+| :--- | :--- | :--- |
+| `--lock` | | Path to lockfile (required) |
+| `-t, --timeout` | `0` | Execution timeout (0 = no timeout) |
+| `--dry-run` | `false` | Verify everything but don't execute |
+| `--require-provenance` | `true` | Require provenance verification |
+| `--expected-source` | | Expected source repository pattern (regex) |
+| `--bin` | | Binary name for packages with multiple exports |
+| `--keep-temp` | `false` | Don't delete temp directory (debug) |
+| `--allow-missing-installed-integrity` | `false` | Proceed with warning if installed integrity cannot be verified (NOT recommended) |
+| `--unsafe-allow-private-tarball-hosts` | `false` | Allow tarball downloads from private networks (NOT recommended) |
+
+**Examples**
+```bash
+# Use command from lockfile
+mcptrust run --lock mcp-lock.json
+
+# Override command (must match pinned artifact)
+mcptrust run --lock mcp-lock.json -- "npx -y @scope/pkg /custom/path"
+
+# Dry run - verify everything but don't execute
+mcptrust run --dry-run --lock mcp-lock.json
+
+# Bypass provenance check (NOT recommended)
+mcptrust run --require-provenance=false --lock mcp-lock.json
+```
+
+---
+
+### `artifact`
+Artifact verification commands.
+
+#### `artifact verify`
+Verify artifact integrity by comparing registry metadata against lockfile pin.
+
+```bash
+mcptrust artifact verify [lockfile] [flags]
+```
+
+**Flags**
+
+| Flag | Default | Description |
+| :--- | :--- | :--- |
+| `-l, --lockfile` | `mcp-lock.json` | Path to lockfile |
+| `-t, --timeout` | `30s` | Timeout for registry operations |
+| `--deep` | `false` | Download tarball and verify SHA256/SRI |
+| `--unsafe-allow-private-tarball-hosts` | `false` | Allow tarball downloads from private networks (requires `--deep`) |
+
+**Examples**
+```bash
+# Basic integrity check
+mcptrust artifact verify
+
+# Deep verification (download and verify tarball)
+mcptrust artifact verify --deep mcp-lock.json
+```
+
+#### `artifact provenance`
+Verify SLSA/Sigstore provenance attestations.
+
+```bash
+mcptrust artifact provenance [lockfile] [flags]
+```
+
+**Flags**
+
+| Flag | Default | Description |
+| :--- | :--- | :--- |
+| `-l, --lockfile` | `mcp-lock.json` | Path to lockfile |
+| `-t, --timeout` | `60s` | Timeout for verification operations |
+| `--expected-source` | | Expected source repository pattern (regex) |
+| `--json` | `false` | Output as JSON |
+
+**Examples**
+```bash
+# Verify provenance
+mcptrust artifact provenance mcp-lock.json
+
+# Verify with source repo check
+mcptrust artifact provenance --expected-source "^https://github.com/modelcontextprotocol/.*" mcp-lock.json
+
+# JSON output
+mcptrust artifact provenance --json mcp-lock.json
+```
+
+---
+
 ### `completion`
 Generate the autocompletion script for mcptrust for the specified shell.
 
@@ -275,3 +419,14 @@ mcptrust completion [command]
 | Flag | Default | Description |
 | :--- | :--- | :--- |
 | `-h, --help` | | help for completion |
+
+---
+
+## Common Errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `drift detected` | Server capabilities don't match lockfile | Run `mcptrust check` to see diff, then `mcptrust lock` to approve |
+| `signature verification failed` | Lockfile tampered or wrong key | Re-sign with `mcptrust sign` or check public key |
+| `policy check failed` | Server violates CEL rules | Update server to comply or edit `policy.yaml` |
+| `tarball host blocked` | Private IP detected (SSRF protection) | Use `--unsafe-allow-private-tarball-hosts` (if trust is established) |

@@ -9,7 +9,7 @@ import (
 	"unicode/utf16"
 )
 
-// CanonVersion algo
+// CanonVersion enum
 type CanonVersion string
 
 const (
@@ -19,7 +19,7 @@ const (
 	CanonV2 CanonVersion = "v2"
 )
 
-// DefaultCanonVersion v1 (legacy compatible)
+// DefaultCanonVersion is v1 (legacy compatible)
 const DefaultCanonVersion = CanonV1
 
 // CanonicalizeJSONWithVersion helper
@@ -34,13 +34,13 @@ func CanonicalizeJSONWithVersion(v interface{}, version CanonVersion) ([]byte, e
 	}
 }
 
-// CanonicalizeJSONv1 original algo
+// CanonicalizeJSONv1 original
 func CanonicalizeJSONv1(v interface{}) ([]byte, error) {
 	canonical := canonicalizeValueV1(v)
 	return json.Marshal(canonical)
 }
 
-// CanonicalizeJSONv2 JCS (RFC 8785)
+// CanonicalizeJSONv2 JCS/RFC8785
 func CanonicalizeJSONv2(v interface{}) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := writeJCSValue(&buf, v); err != nil {
@@ -181,7 +181,7 @@ func writeJCSValue(buf *bytes.Buffer, v interface{}) error {
 	return nil
 }
 
-// writeJCSObject keys sorted by UTF-16
+// writeJCSObject sorted keys
 func writeJCSObject(buf *bytes.Buffer, m map[string]interface{}) error {
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -208,7 +208,7 @@ func writeJCSObject(buf *bytes.Buffer, m map[string]interface{}) error {
 	return nil
 }
 
-// compareUTF16 JCS requirement
+// compareUTF16 helper
 func compareUTF16(a, b string) int {
 	aRunes := []rune(a)
 	bRunes := []rune(b)
@@ -233,7 +233,7 @@ func compareUTF16(a, b string) int {
 	return len(aUnits) - len(bUnits)
 }
 
-// writeJCSString with specific escaping
+// writeJCSString escaped
 func writeJCSString(buf *bytes.Buffer, s string) {
 	buf.WriteByte('"')
 	for _, r := range s {
@@ -264,7 +264,7 @@ func writeJCSString(buf *bytes.Buffer, s string) {
 	buf.WriteByte('"')
 }
 
-// jcsFormatNumber RFC 8785 rules
+// jcsFormatNumber RFC8785
 func jcsFormatNumber(f float64) (string, error) {
 	// check for special values - these are not valid JSON numbers
 	if f != f { // NaN check (NaN != NaN is always true)
@@ -272,7 +272,7 @@ func jcsFormatNumber(f float64) (string, error) {
 	}
 	// Infinity check
 	if f > 1.7976931348623157e+308 || f < -1.7976931348623157e+308 {
-		return "", fmt.Errorf("Infinity is not a valid JSON number")
+		return "", fmt.Errorf("infinity is not a valid JSON number")
 	}
 
 	// handle -0 -> output as "0" per RFC 8785

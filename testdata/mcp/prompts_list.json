@@ -1,0 +1,39 @@
+{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+        "prompts": [
+            {
+                "name": "code_review",
+                "description": "Asks the LLM to analyze code quality and suggest improvements",
+                "arguments": [
+                    {
+                        "name": "code",
+                        "description": "The code to review",
+                        "required": true
+                    }
+                ]
+            },
+            {
+                "name": "summarize",
+                "description": "Summarize the given text"
+            },
+            {
+                "name": "translate",
+                "description": "Translate text to another language",
+                "arguments": [
+                    {
+                        "name": "text",
+                        "description": "The text to translate",
+                        "required": true
+                    },
+                    {
+                        "name": "target_language",
+                        "description": "Target language code",
+                        "required": true
+                    }
+                ]
+            }
+        ]
+    }
+}

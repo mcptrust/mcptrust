@@ -1,0 +1,314 @@
+# MCPTrust Action Self-Test
+#
+# Tests the composite action in fixture mode (no network dependencies).
+# Validates both lock and check modes with step summary generation.
+
+name: Action Self-Test
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - '.github/actions/mcptrust/**'
+      - '.github/workflows/action-selftest.yml'
+      - 'scripts/ci/**'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - '.github/actions/mcptrust/**'
+      - '.github/workflows/action-selftest.yml'
+      - 'scripts/ci/**'
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    name: Self-Test (Fixture Mode)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
+
+      - name: Setup Go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.0.0
+        with:
+          go-version: '1.24.x'
+
+      # Run report.js unit tests first
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.2.0
+        with:
+          node-version: '20'
+
+      - name: Run report.js tests
+        run: node scripts/ci/report.test.js
+
+      - name: Build Binaries
+        run: |
+          go build -o mock-server tests/fixtures/mock_mcp_server/main.go
+          go build -o mcptrust ./cmd/mcptrust
+          chmod +x mock-server mcptrust
+          echo "$(pwd)" >> $GITHUB_PATH
+          echo "Binaries built:"
+          ls -l mock-server mcptrust
+
+      # Test mode=lock with fixture
+      - name: Lock (fixture mode)
+        uses: ./.github/actions/mcptrust
+        id: lock
+        env:
+          # Use local mock server
+          MCP_SERVER_COMMAND: ./mock-server
+        with:
+          mode: lock
+          server_command: './mock-server'
+          # Use pre-built binary (avoids nested setup-go conflict)
+          mcptrust_bin: './mcptrust'
+          pin: 'false'
+          verify_provenance: 'false'
+
+      - name: Verify lockfile created
+        run: |
+          if [[ ! -f "${{ steps.lock.outputs.lockfile_path }}" ]]; then
+            echo "::error::Lockfile not created: ${{ steps.lock.outputs.lockfile_path }}"
+            exit 1
+          fi
+          echo "✅ Lockfile created: ${{ steps.lock.outputs.lockfile_path }}"
+          cat "${{ steps.lock.outputs.lockfile_path }}"
+
+      # Test mode=check with fixture (using server_argv for code path coverage)
+      - name: Check (fixture mode)
+        uses: ./.github/actions/mcptrust
+        id: check
+        env:
+          # Use local mock server
+          MCP_SERVER_COMMAND: ./mock-server
+        with:
+          mode: check
+          server_argv: |
+            ./mock-server
+          lockfile: ${{ steps.lock.outputs.lockfile_path }}
+          fail_on: critical
+          policy: baseline
+          report: step_summary
+          redact: true
+          # Use pre-built binary
+          mcptrust_bin: './mcptrust'
+
+      - name: Verify check outputs
+        run: |
+          echo "Check outcome: ${{ steps.check.outputs.outcome }}"
+          
+          if [[ ! -f "${{ steps.check.outputs.check_json_path }}" ]]; then
+            echo "::warning::Check JSON not found: ${{ steps.check.outputs.check_json_path }}"
+          else
+            echo "✅ Check JSON: ${{ steps.check.outputs.check_json_path }}"
+            cat "${{ steps.check.outputs.check_json_path }}"
+          fi
+          
+          if [[ ! -f "${{ steps.check.outputs.summary_path }}" ]]; then
+            echo "::warning::Summary not found: ${{ steps.check.outputs.summary_path }}"
+          else
+            echo "✅ Summary: ${{ steps.check.outputs.summary_path }}"
+            cat "${{ steps.check.outputs.summary_path }}"
+          fi
+
+      - name: Verify receipt created
+        run: |
+          if [[ ! -f "${{ steps.check.outputs.receipt_path }}" ]]; then
+            echo "::warning::Receipt not found: ${{ steps.check.outputs.receipt_path }}"
+          else
+            echo "✅ Receipt: ${{ steps.check.outputs.receipt_path }}"
+            cat "${{ steps.check.outputs.receipt_path }}"
+          fi
+
+      - name: Summary
+        run: |
+          echo "## MCPTrust Action Self-Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| report.js tests | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Lock (fixture) | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Check (fixture) | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Lockfile**: \`${{ steps.lock.outputs.lockfile_path }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Receipt**: \`${{ steps.check.outputs.receipt_path }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Check outcome**: \`${{ steps.check.outputs.outcome }}\`" >> $GITHUB_STEP_SUMMARY
+  # Regression Test: Checksum Fail Closed (SEC-B)
+  # Verifies that the action fails if checksums.txt cannot be downloaded.
+  checksum_fail_download:
+    name: Regression - Checksum Download Fail
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
+
+      - name: Setup Mock Curl
+        run: |
+          mkdir -p mock-bin
+          cat << 'EOF' > mock-bin/curl
+          #!/bin/bash
+          # Simulate binary download success (mcptrust-linux-amd64)
+          if [[ "$*" == *"mcptrust-linux-amd64"* ]]; then
+            echo '#!/bin/bash' > /tmp/mcptrust
+            echo 'echo "mcptrust version 0.0.0-mock"' >> /tmp/mcptrust
+            chmod +x /tmp/mcptrust
+            exit 0
+          fi
+          # Simulate checksum download failure
+          if [[ "$*" == *"checksums.txt"* ]]; then
+            exit 22
+          fi
+          # Fallback to real curl for anything else
+          /usr/bin/curl "$@"
+          EOF
+          chmod +x mock-bin/curl
+          echo "$(pwd)/mock-bin" >> $GITHUB_PATH
+
+      - name: Run Action (Should Fail)
+        id: failed_run
+        uses: ./.github/actions/mcptrust
+        continue-on-error: true
+        with:
+          mode: check
+          install_method: release
+          install_ref: v0.0.0-mock
+          upload_artifacts: 'false'
+
+      - name: Assert Failure
+        if: steps.failed_run.outcome == 'success'
+        run: |
+          echo "::error::Action should have failed due to missing checksums!"
+          exit 1
+
+  # Regression: Checksum Missing Entry
+  checksum_fail_missing_entry:
+    name: Regression - Checksum Missing Entry
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
+
+      - name: Setup Mock Curl
+        run: |
+          mkdir -p mock-bin
+          cat << 'EOF' > mock-bin/curl
+          #!/bin/bash
+          if [[ "$*" == *"mcptrust-linux-amd64"* ]]; then
+            echo '#!/bin/bash' > /tmp/mcptrust
+            chmod +x /tmp/mcptrust
+            exit 0
+          fi
+          if [[ "$*" == *"checksums.txt"* ]]; then
+            # Return valid file but missing our architecture
+            echo "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  other-binary" > /tmp/checksums.txt
+            exit 0
+          fi
+          /usr/bin/curl "$@"
+          EOF
+          chmod +x mock-bin/curl
+          echo "$(pwd)/mock-bin" >> $GITHUB_PATH
+
+      - name: Run Action (Should Fail)
+        id: failed_run
+        uses: ./.github/actions/mcptrust
+        continue-on-error: true
+        with:
+          mode: check
+          install_method: release
+          install_ref: v0.0.0-mock
+          upload_artifacts: 'false'
+
+      - name: Assert Failure
+        if: steps.failed_run.outcome == 'success'
+        run: |
+          echo "::error::Action should have failed due to missing checksum entry!"
+          exit 1
+
+  # Regression: Checksum Mismatch
+  checksum_fail_mismatch:
+    name: Regression - Checksum Mismatch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
+
+      - name: Setup Mock Curl
+        run: |
+          mkdir -p mock-bin
+          cat << 'EOF' > mock-bin/curl
+          #!/bin/bash
+          if [[ "$*" == *"mcptrust-linux-amd64"* ]]; then
+            echo "CONTENT_A" > /tmp/mcptrust
+            chmod +x /tmp/mcptrust
+            exit 0
+          fi
+          if [[ "$*" == *"checksums.txt"* ]]; then
+            # Checksum for DIFFERENT content
+            echo "0000000000000000000000000000000000000000000000000000000000000000  mcptrust-linux-amd64" > /tmp/checksums.txt
+            exit 0
+          fi
+          /usr/bin/curl "$@"
+          EOF
+          chmod +x mock-bin/curl
+          echo "$(pwd)/mock-bin" >> $GITHUB_PATH
+
+      - name: Run Action (Should Fail)
+        id: failed_run
+        uses: ./.github/actions/mcptrust
+        continue-on-error: true
+        with:
+          mode: check
+          install_method: release
+          install_ref: v0.0.0-mock
+          upload_artifacts: 'false'
+
+      - name: Assert Failure
+        if: steps.failed_run.outcome == 'success'
+        run: |
+          echo "::error::Action should have failed due to checksum mismatch!"
+          exit 1
+
+  # Regression Test: Checksum Verify Pass
+  # Verifies that the action passes when checksums match.
+  checksum_verify_pass:
+    name: Regression - Checksum Verify Pass
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
+
+      - name: Setup Mock Environment
+        run: |
+          mkdir -p mock-bin
+          cat << 'EOF' > mock-bin/curl
+          #!/bin/bash
+          if [[ "$*" == *"mcptrust-linux-amd64"* ]]; then
+            echo '#!/bin/bash' > /tmp/mcptrust
+            echo 'if [[ "$1" == "--version" ]]; then echo "mcptrust version 0.0.0-mock"; exit 0; fi' >> /tmp/mcptrust
+            echo 'echo "{\"outcome\":\"PASS\"}"' >> /tmp/mcptrust # Mock check output
+            chmod +x /tmp/mcptrust
+            exit 0
+          fi
+          if [[ "$*" == *"checksums.txt"* ]]; then
+            # Generate valid checksum for the mock binary
+            # Use 2 spaces to match the strict regex expectations
+            SUM=$(sha256sum /tmp/mcptrust | cut -d ' ' -f 1)
+            echo "${SUM}  mcptrust-linux-amd64" > /tmp/checksums.txt
+            exit 0
+          fi
+          /usr/bin/curl "$@"
+          EOF
+          chmod +x mock-bin/curl
+          echo "$(pwd)/mock-bin" >> $GITHUB_PATH
+
+      - name: Run Action (Should Pass)
+        uses: ./.github/actions/mcptrust
+        with:
+          mode: check
+          install_method: release
+          install_ref: v0.0.0-mock
+          server_command: echo "mock"
+          upload_artifacts: 'false'

@@ -1,0 +1,34 @@
+# MCPTrust Check - With PR Comments
+#
+# Same as mcptrust.yml but with PR comments enabled.
+# Requires pull-requests: write permission for comments.
+
+name: MCPTrust (with PR comments)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'mcp-lock.json'
+      - '.github/workflows/mcptrust-strict.yml'
+
+# Extra permission needed for PR comments
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
+      
+      - uses: mcptrust/mcptrust/.github/actions/mcptrust@b020fc206b0b45c51209f4a7e9e1172a8f412f53 # v0.1.1
+        with:
+          mode: check
+          lockfile: mcp-lock.json
+          fail_on: critical
+          policy: strict
+          server_command: 'npx -y @modelcontextprotocol/server-filesystem /tmp'
+          report: both  # step_summary AND pr_comment
+          redact: true

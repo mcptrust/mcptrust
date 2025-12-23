@@ -57,17 +57,17 @@ jobs:
   sign:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
       
-      - uses: sigstore/cosign-installer@v3.7.0
+      - uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
         with:
           cosign-release: 'v2.4.1'
       
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.2.0
         with:
           go-version: '1.22'
       
-      - run: go install github.com/mcptrust/mcptrust/cmd/mcptrust@latest
+      - run: go install github.com/mcptrust/mcptrust/cmd/mcptrust@v0.1.1
       
       - name: Sign lockfile (keyless)
         run: mcptrust sign --sigstore mcp-lock.json
@@ -97,15 +97,15 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
       
-      - uses: sigstore/cosign-installer@v3.7.0
+      - uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
       
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.2.0
         with:
           go-version: '1.22'
       
-      - run: go install github.com/mcptrust/mcptrust/cmd/mcptrust@latest
+      - run: go install github.com/mcptrust/mcptrust/cmd/mcptrust@v0.1.1
       
       - name: Verify lockfile signature
         run: |
@@ -115,7 +115,7 @@ jobs:
       
       - name: Post success comment
         if: success()
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.0.1
         with:
           script: |
             github.rest.issues.createComment({
@@ -308,6 +308,6 @@ This means you're using an older MCPTrust version that doesn't support v3 signat
 **Solution:** Upgrade MCPTrust:
 
 ```bash
-go install github.com/mcptrust/mcptrust/cmd/mcptrust@latest
+go install github.com/mcptrust/mcptrust/cmd/mcptrust@v0.1.1
 ```
 

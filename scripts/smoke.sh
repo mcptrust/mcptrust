@@ -1,18 +1,8 @@
 #!/usr/bin/env bash
 #
 # MCPTrust Smoke Test
-# ===================
-# Quick keygen/sign/verify check.
-# No repo modifications.
-#
-# Requirements:
-#   - mcptrust binary
-#   - Node.js + npx
-#
-# Usage:
-#   MCPTRUST_BIN=./mcptrust bash scripts/smoke.sh
-#
-# Ed25519 only (no cosign).
+# Keygen/sign/verify check. Ed25519 only.
+# Needs: mcptrust, node/npx
 
 set -euo pipefail
 
@@ -21,7 +11,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-# Find binary and convert to absolute path (before we cd)
+# Find binary/abspath
 MCPTRUST="${MCPTRUST_BIN:-mcptrust}"
 if [[ "${MCPTRUST}" == "./"* ]] || [[ "${MCPTRUST}" != "/"* ]]; then
     # abspath

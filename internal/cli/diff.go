@@ -7,23 +7,22 @@ import (
 	"time"
 
 	"github.com/mcptrust/mcptrust/internal/differ"
+	"github.com/mcptrust/mcptrust/internal/observability"
+	"github.com/mcptrust/mcptrust/internal/observability/logging"
+	otelobs "github.com/mcptrust/mcptrust/internal/observability/otel"
+	"github.com/mcptrust/mcptrust/internal/observability/receipt"
 	"github.com/spf13/cobra"
-)
-
-// colors
-const (
-	colorYellow = "\033[33m"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // diffCmd
 var diffCmd = &cobra.Command{
 	Use:   "diff -- <command>",
-	Short: "Compare live MCP server against lockfile",
+	Short: "Compare live server vs lockfile",
 	Long: `Compares current server state against mcp-lock.json.
-Reports what changed in human-readable terms ("Semantic Translator").
-
-Example:
-  mcptrust diff -- "npx -y @modelcontextprotocol/server-filesystem /tmp"`,
+Reports what changed in human-readable terms.`,
 	SilenceUsage: true,
 	RunE:         runDiff,
 }
@@ -43,16 +42,62 @@ func GetDiffCmd() *cobra.Command {
 	return diffCmd
 }
 
-func runDiff(cmd *cobra.Command, args []string) error {
+func runDiff(cmd *cobra.Command, args []string) (err error) {
+	// Get context and start receipt session immediately for early-return coverage
+	ctx := cmd.Context()
+	sess := receipt.Start(ctx, "mcptrust diff", os.Args[1:])
+	var criticalCount, benignCount int
+	var driftSummary string
+
+	defer func() {
+		_ = sess.Finish(err, receipt.WithDrift(criticalCount, benignCount, driftSummary))
+	}()
+
 	// command after '--'
 	command := extractCommand(args)
 	if command == "" {
 		fmt.Fprintf(os.Stderr, "Error: no MCP server command provided. Usage: mcptrust diff -- <command>\n")
+		err = fmt.Errorf("no MCP server command provided")
 		os.Exit(2) // Exit 2 = runtime/usage error
-		return nil
+		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), diffTimeoutFlag)
+	// Get logger
+	log := logging.From(ctx)
+	start := time.Now()
+
+	// Start OTel span if enabled (before log.Event so trace_id is available)
+	if h := otelobs.From(ctx); h != nil {
+		var span trace.Span
+		ctx, span = h.Tracer.Start(ctx, "mcptrust.diff",
+			trace.WithAttributes(
+				attribute.String("mcptrust.op_id", observability.OpID(ctx)),
+				attribute.String("mcptrust.command", "diff"),
+				attribute.String("mcptrust.lockfile", diffLockfileFlag),
+			))
+		defer func() {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "failed")
+			} else {
+				span.SetStatus(codes.Ok, "success")
+			}
+			span.End()
+		}()
+	}
+
+	// Emit start event (after span so trace_id is in context)
+	log.Event(ctx, "diff.start", nil)
+
+	var resultStatus string
+	defer func() {
+		log.Event(ctx, "diff.complete", map[string]any{
+			"duration_ms": time.Since(start).Milliseconds(),
+			"result":      resultStatus,
+		})
+	}()
+
+	ctx, cancel := context.WithTimeout(ctx, diffTimeoutFlag)
 	defer cancel()
 
 	engine := differ.NewEngine(diffTimeoutFlag)
@@ -68,6 +113,8 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	// Exit 0 = no drift (server matches lockfile)
 	if !result.HasChanges {
 		fmt.Printf("%s✓ No changes detected - server matches lockfile%s\n", colorGreen, colorReset)
+		resultStatus = "success"
+		driftSummary = "no changes"
 		return nil
 	}
 
@@ -78,11 +125,24 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 	for _, toolDiff := range result.ToolDiffs {
 		printToolDiff(toolDiff)
+		// Count severity
+		for _, tr := range toolDiff.Translations {
+			sev := differ.GetSeverity(tr)
+			if sev == differ.SeverityCritical {
+				criticalCount++
+			} else {
+				benignCount++
+			}
+		}
 	}
 
+	driftSummary = fmt.Sprintf("%d tool(s) changed", len(result.ToolDiffs))
+
 	// Exit 1 = drift detected (changes found)
+	resultStatus = "fail"
+	err = fmt.Errorf("drift detected: %d tool(s) changed", len(result.ToolDiffs))
 	os.Exit(1)
-	return nil
+	return
 }
 
 func printToolDiff(td differ.ToolDiff) {

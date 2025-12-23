@@ -10,6 +10,7 @@ import (
 
 	"github.com/mcptrust/mcptrust/internal/crypto"
 	"github.com/mcptrust/mcptrust/internal/locker"
+	"github.com/mcptrust/mcptrust/internal/observability/logging"
 	"github.com/mcptrust/mcptrust/internal/sigstore"
 	"github.com/spf13/cobra"
 )
@@ -20,19 +21,12 @@ const (
 	defaultSignaturePath  = "mcp-lock.json.sig"
 )
 
-// keygenCmd represents the keygen command
+// keygenCmd
 var keygenCmd = &cobra.Command{
 	Use:   "keygen",
 	Short: "Generate Ed25519 keypair",
-	Long: `Generate a new Ed25519 keypair for signing lockfiles.
-
-Creates:
-  - private.key: Secret signing key.
-  - public.key:  Public verification key.
-
-Example:
-  mcptrust keygen
-  mcptrust keygen --private my.key --public my.pub`,
+	Long: `Generate keys for signing lockfiles.
+Creates private.key (foundational) and public.key.`,
 	RunE: runKeygen,
 }
 
@@ -75,27 +69,13 @@ func runKeygen(cmd *cobra.Command, args []string) error {
 // signCmd signs lockfiles
 var signCmd = &cobra.Command{
 	Use:   "sign",
-	Short: "Sign mcp-lock.json with Ed25519 or Sigstore",
-	Long: `Sign the lockfile using Ed25519 key or Sigstore keyless.
-
-Ed25519 (default):
-  Signs using local private key. Needs --key.
-
-Sigstore (--sigstore):
-  Keyless signing via OIDC (GitHub Actions or browser).
-  Requires 'cosign' installed.
-
-The signature covers the canonical (deterministic) JSON.
+	Short: "Sign mcp-lock.json",
+	Long: `Sign lockfile with Ed25519 (default) or Sigstore.
+Signature covers the canonical JSON.
 
 Examples:
-  # Ed25519
   mcptrust sign --key private.key
-
-  # Sigstore (CI/CD)
-  mcptrust sign --sigstore
-
-  # Custom file
-  mcptrust sign --sigstore --lockfile custom.json`,
+  mcptrust sign --sigstore`,
 	RunE: runSign,
 }
 
@@ -122,6 +102,20 @@ func GetSignCmd() *cobra.Command {
 }
 
 func runSign(cmd *cobra.Command, args []string) error {
+	// Get logger and emit start event
+	ctx := cmd.Context()
+	log := logging.From(ctx)
+	start := time.Now()
+	log.Event(ctx, "sign.start", nil)
+
+	var resultStatus string
+	defer func() {
+		log.Event(ctx, "sign.complete", map[string]any{
+			"duration_ms": time.Since(start).Milliseconds(),
+			"result":      resultStatus,
+		})
+	}()
+
 	// Determine output path
 	outputPath := signOutputFlag
 	if outputPath == "" {
@@ -130,6 +124,7 @@ func runSign(cmd *cobra.Command, args []string) error {
 
 	// Validate mode selection
 	if signSigstoreFlag && signPrivateKeyFlag != "" {
+		resultStatus = "fail"
 		return fmt.Errorf("cannot use both --sigstore and --key flags")
 	}
 	if !signSigstoreFlag && signPrivateKeyFlag == "" {
@@ -160,10 +155,22 @@ func runSign(cmd *cobra.Command, args []string) error {
 	}
 
 	if signSigstoreFlag {
-		return runSignSigstore(canonicalData, canonVersion, outputPath)
+		err := runSignSigstore(canonicalData, canonVersion, outputPath)
+		if err != nil {
+			resultStatus = "fail"
+		} else {
+			resultStatus = "success"
+		}
+		return err
 	}
 
-	return runSignEd25519(canonicalData, canonVersion, outputPath)
+	err = runSignEd25519(canonicalData, canonVersion, outputPath)
+	if err != nil {
+		resultStatus = "fail"
+	} else {
+		resultStatus = "success"
+	}
+	return err
 }
 
 func runSignEd25519(canonicalData []byte, canonVersion locker.CanonVersion, outputPath string) error {
@@ -244,36 +251,14 @@ func runSignSigstore(canonicalData []byte, canonVersion locker.CanonVersion, out
 	return nil
 }
 
-// verifyCmd verifies signatures
+// verifyCmd
 var verifyCmd = &cobra.Command{
 	Use:   "verify",
 	Short: "Verify lockfile signature",
-	Long: `Verify that the lockfile matches its signature.
+	Long: `Verify lockfile against signature.
+Auto-detects Ed25519 vs Sigstore.
 
-Auto-detects signature type:
-- Ed25519: needs --key
-- Sigstore: needs --issuer and --identity (or --identity-regexp)
-
-For Sigstore, you must matching the OIDC issuer and identity to
-prevent impersonation.
-
-Examples:
-  # Ed25519
-  mcptrust verify --key public.key
-
-  # Sigstore (GitHub Actions)
-  mcptrust verify \
-    --issuer https://token.actions.githubusercontent.com \
-    --identity "https://github.com/org/repo/.github/workflows/sign.yml@refs/heads/main"
-
-  # Sigstore (regex)
-  mcptrust verify \
-    --issuer https://token.actions.githubusercontent.com \
-    --identity-regexp "https://github.com/org/repo/.*"
-
-Exit codes:
-  0 = Valid
-  1 = Invalid`,
+For Sigstore, requires --issuer and --identity (or regex) to prevent impersonation.`,
 	SilenceUsage: true,
 	RunE:         runVerify,
 }
@@ -314,6 +299,20 @@ func GetVerifyCmd() *cobra.Command {
 }
 
 func runVerify(cmd *cobra.Command, args []string) error {
+	// Get logger and emit start event
+	ctx := cmd.Context()
+	log := logging.From(ctx)
+	start := time.Now()
+	log.Event(ctx, "verify.start", nil)
+
+	var resultStatus string
+	defer func() {
+		log.Event(ctx, "verify.complete", map[string]any{
+			"duration_ms": time.Since(start).Milliseconds(),
+			"result":      resultStatus,
+		})
+	}()
+
 	// Determine signature path
 	sigPath := verifySignatureFlag
 	if sigPath == "" {
@@ -323,17 +322,20 @@ func runVerify(cmd *cobra.Command, args []string) error {
 	// Read lockfile
 	lockfileData, err := os.ReadFile(verifyLockfileFlag)
 	if err != nil {
+		resultStatus = "fail"
 		return fmt.Errorf("failed to read lockfile: %w", err)
 	}
 
 	// Read and parse signature
 	sigFileData, err := os.ReadFile(sigPath)
 	if err != nil {
+		resultStatus = "fail"
 		return fmt.Errorf("failed to read signature: %w", err)
 	}
 
 	envelope, err := crypto.ReadSignature(sigFileData)
 	if err != nil {
+		resultStatus = "fail"
 		return fmt.Errorf("invalid signature file: %w", err)
 	}
 
@@ -354,10 +356,22 @@ func runVerify(cmd *cobra.Command, args []string) error {
 	}
 
 	if useSigstore {
-		return runVerifySigstore(lockfileData, envelope, sigPath)
+		err := runVerifySigstore(lockfileData, envelope, sigPath)
+		if err != nil {
+			resultStatus = "fail"
+		} else {
+			resultStatus = "success"
+		}
+		return err
 	}
 
-	return runVerifyEd25519(lockfileData, envelope)
+	err = runVerifyEd25519(lockfileData, envelope)
+	if err != nil {
+		resultStatus = "fail"
+	} else {
+		resultStatus = "success"
+	}
+	return err
 }
 
 func runVerifyEd25519(lockfileData []byte, envelope *crypto.SignatureEnvelope) error {

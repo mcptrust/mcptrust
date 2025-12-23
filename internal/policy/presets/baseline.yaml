@@ -1,0 +1,53 @@
+name: "Baseline (Warn-Only)"
+mode: warn
+
+rules:
+  - name: "artifact_pinned"
+    expr: 'has(input.artifact) && input.artifact.integrity != ""'
+    failure_msg: "⚠ Artifact is not pinned — recommend running 'mcptrust lock --pin'"
+    severity: warn
+    control_refs:
+      - "NIST AI RMF: GOVERN 1.1"
+      - "SOC2: CC7.2"
+    evidence:
+      - "Signed mcp-lock.json with integrity hash"
+    evidence_commands:
+      - "mcptrust verify --lockfile mcp-lock.json"
+
+  - name: "provenance_present"
+    expr: 'has(input.artifact) && has(input.artifact.provenance) && input.artifact.provenance.verified == true'
+    failure_msg: "⚠ Provenance not verified — recommend adding --verify-provenance"
+    severity: warn
+    control_refs:
+      - "NIST AI RMF: MAP 1.1"
+      - "SLSA: Build L2"
+    evidence:
+      - "SLSA provenance attestation verified via cosign"
+    evidence_commands:
+      - "mcptrust lock --pin --verify-provenance -- <server command>"
+      - "mcptrust artifact provenance mcp-lock.json"
+
+  - name: "no_high_risk_tools"
+    expr: '!input.tools.exists(t, t.risk_level == "HIGH")'
+    failure_msg: "⚠ High-risk tools detected — review before production use"
+    severity: warn
+    control_refs:
+      - "NIST AI RMF: MEASURE 2.3"
+      - "ISO/IEC 42001: 9.2"
+    evidence:
+      - "mcptrust scan output with risk classification"
+    evidence_commands:
+      - "mcptrust scan -- <server command>"
+      - "mcptrust policy check --preset baseline -- <server command>"
+
+  - name: "no_critical_drift"
+    expr: '!has(input.drift) || !input.drift.hasDrift || !input.drift.items.exists(x, x.severity == "critical")'
+    failure_msg: "✗ CRITICAL drift detected — lockfile is out of sync with server"
+    severity: error
+    control_refs:
+      - "NIST AI RMF: GOVERN 1.2"
+      - "SOC2: CC6.1"
+    evidence:
+      - "mcptrust check output showing drift items"
+    evidence_commands:
+      - "mcptrust check --lock mcp-lock.json -- <server command>"

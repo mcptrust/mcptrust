@@ -9,9 +9,7 @@ import (
 	"testing"
 )
 
-// TestCanonicalizeJSONv1_GoldenTest ensures v1 produces consistent output
 func TestCanonicalizeJSONv1_GoldenTest(t *testing.T) {
-	// sample lockfile-like structure
 	input := map[string]interface{}{
 		"version":        "1.0",
 		"server_command": "npx server",
@@ -34,7 +32,6 @@ func TestCanonicalizeJSONv1_GoldenTest(t *testing.T) {
 		t.Fatalf("CanonicalizeJSONv1 failed: %v", err)
 	}
 
-	// run twice to verify determinism
 	result2, err := CanonicalizeJSONv1(input)
 	if err != nil {
 		t.Fatalf("CanonicalizeJSONv1 second call failed: %v", err)
@@ -44,7 +41,6 @@ func TestCanonicalizeJSONv1_GoldenTest(t *testing.T) {
 		t.Errorf("v1 not deterministic:\nfirst:  %s\nsecond: %s", result, result2)
 	}
 
-	// verify keys are sorted (v1 uses Go string ordering)
 	if !strings.Contains(string(result), `"read_file"`) {
 		t.Errorf("expected read_file in output")
 	}
@@ -52,7 +48,6 @@ func TestCanonicalizeJSONv1_GoldenTest(t *testing.T) {
 		t.Errorf("expected write_file in output")
 	}
 
-	// verify read_file comes before write_file (alphabetically)
 	readIdx := strings.Index(string(result), `"read_file"`)
 	writeIdx := strings.Index(string(result), `"write_file"`)
 	if readIdx >= writeIdx {
@@ -60,7 +55,6 @@ func TestCanonicalizeJSONv1_GoldenTest(t *testing.T) {
 	}
 }
 
-// TestCanonicalizeJSONv2_BasicObject tests v2 JCS with simple object
 func TestCanonicalizeJSONv2_BasicObject(t *testing.T) {
 	input := map[string]interface{}{
 		"z": "last",
@@ -73,14 +67,12 @@ func TestCanonicalizeJSONv2_BasicObject(t *testing.T) {
 		t.Fatalf("CanonicalizeJSONv2 failed: %v", err)
 	}
 
-	// JCS should produce: {"a":"first","m":"middle","z":"last"}
 	expected := `{"a":"first","m":"middle","z":"last"}`
 	if string(result) != expected {
 		t.Errorf("v2 basic object:\nexpected: %s\ngot:      %s", expected, result)
 	}
 }
 
-// TestCanonicalizeJSONv2_Numbers tests JCS number formatting
 func TestCanonicalizeJSONv2_Numbers(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -106,7 +98,6 @@ func TestCanonicalizeJSONv2_Numbers(t *testing.T) {
 	}
 }
 
-// TestCanonicalizeJSONv2_StringEscaping tests JCS string escaping
 func TestCanonicalizeJSONv2_StringEscaping(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -135,7 +126,6 @@ func TestCanonicalizeJSONv2_StringEscaping(t *testing.T) {
 	}
 }
 
-// TestCanonicalizeJSONv2_NestedObjects tests JCS with nested structures
 func TestCanonicalizeJSONv2_NestedObjects(t *testing.T) {
 	input := map[string]interface{}{
 		"outer": map[string]interface{}{
@@ -150,20 +140,17 @@ func TestCanonicalizeJSONv2_NestedObjects(t *testing.T) {
 		t.Fatalf("CanonicalizeJSONv2 failed: %v", err)
 	}
 
-	// verify it's valid JSON
 	var parsed interface{}
 	if err := json.Unmarshal(result, &parsed); err != nil {
 		t.Errorf("result is not valid JSON: %v", err)
 	}
 
-	// array comes before outer alphabetically
 	arrayIdx := strings.Index(string(result), `"array"`)
 	outerIdx := strings.Index(string(result), `"outer"`)
 	if arrayIdx >= outerIdx {
 		t.Errorf("key ordering wrong: array should come before outer")
 	}
 
-	// inner keys should also be sorted
 	innerA := strings.Index(string(result), `"a":"inner_first"`)
 	innerZ := strings.Index(string(result), `"z":"inner_last"`)
 	if innerA >= innerZ {
@@ -171,7 +158,6 @@ func TestCanonicalizeJSONv2_NestedObjects(t *testing.T) {
 	}
 }
 
-// TestCanonicalizeJSON_BackwardCompatibility ensures CanonicalizeJSON uses v1
 func TestCanonicalizeJSON_BackwardCompatibility(t *testing.T) {
 	input := map[string]interface{}{"key": "value"}
 
@@ -190,7 +176,6 @@ func TestCanonicalizeJSON_BackwardCompatibility(t *testing.T) {
 	}
 }
 
-// TestCanonicalizeJSONWithVersion tests version dispatcher
 func TestCanonicalizeJSONWithVersion(t *testing.T) {
 	input := map[string]interface{}{"a": float64(1)}
 
@@ -204,7 +189,6 @@ func TestCanonicalizeJSONWithVersion(t *testing.T) {
 		t.Fatalf("v2 failed: %v", err)
 	}
 
-	// both should produce valid JSON
 	var p1, p2 interface{}
 	if err := json.Unmarshal(v1Result, &p1); err != nil {
 		t.Errorf("v1 result not valid JSON: %v", err)
@@ -213,14 +197,12 @@ func TestCanonicalizeJSONWithVersion(t *testing.T) {
 		t.Errorf("v2 result not valid JSON: %v", err)
 	}
 
-	// invalid version should error
 	_, err = CanonicalizeJSONWithVersion(input, "v99")
 	if err == nil {
 		t.Errorf("expected error for invalid version")
 	}
 }
 
-// TestCompareUTF16 tests UTF-16 code unit comparison
 func TestCompareUTF16(t *testing.T) {
 	tests := []struct {
 		a, b     string
@@ -236,7 +218,6 @@ func TestCompareUTF16(t *testing.T) {
 
 	for _, tc := range tests {
 		result := compareUTF16(tc.a, tc.b)
-		// normalize to -1, 0, 1
 		normalized := 0
 		if result < 0 {
 			normalized = -1
@@ -249,11 +230,6 @@ func TestCompareUTF16(t *testing.T) {
 	}
 }
 
-// ============================================================================
-// RFC 8785 JCS Compliance Tests
-// ============================================================================
-
-// TestJCSRejectsNaN verifies NaN returns an error (not "null")
 func TestJCSRejectsNaN(t *testing.T) {
 	input := map[string]interface{}{"val": math.NaN()}
 	_, err := CanonicalizeJSONv2(input)
@@ -265,18 +241,16 @@ func TestJCSRejectsNaN(t *testing.T) {
 	}
 }
 
-// TestJCSRejectsInfinity verifies Infinity returns an error
 func TestJCSRejectsInfinity(t *testing.T) {
 	input := map[string]interface{}{"val": math.Inf(1)}
 	_, err := CanonicalizeJSONv2(input)
 	if err == nil {
 		t.Error("expected error for Infinity, got nil")
 	}
-	if err != nil && !strings.Contains(err.Error(), "Infinity") {
-		t.Errorf("error should mention Infinity, got: %v", err)
+	if err != nil && !strings.Contains(strings.ToLower(err.Error()), "infinity") {
+		t.Errorf("error should mention infinity, got: %v", err)
 	}
 
-	// also test negative infinity
 	input2 := map[string]interface{}{"val": math.Inf(-1)}
 	_, err2 := CanonicalizeJSONv2(input2)
 	if err2 == nil {
@@ -284,7 +258,6 @@ func TestJCSRejectsInfinity(t *testing.T) {
 	}
 }
 
-// TestJCSNegativeZero verifies -0 outputs as "0" per RFC 8785
 func TestJCSNegativeZero(t *testing.T) {
 	negZero := math.Copysign(0, -1)
 	input := map[string]interface{}{"n": negZero}
@@ -298,9 +271,7 @@ func TestJCSNegativeZero(t *testing.T) {
 	}
 }
 
-// TestJCSAstralPlane tests UTF-16 ordering with emoji and supplementary chars
 func TestJCSAstralPlane(t *testing.T) {
-	// emoji (🎉 = U+1F389) is outside BMP, requires surrogate pair in UTF-16
 	input := map[string]interface{}{
 		"🎉":  "party",
 		"a":  "first",
@@ -313,13 +284,11 @@ func TestJCSAstralPlane(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// verify valid JSON
 	var parsed interface{}
 	if err := json.Unmarshal(result, &parsed); err != nil {
 		t.Errorf("result is not valid JSON: %v", err)
 	}
 
-	// a < ab < z < emoji (emoji has high UTF-16 code units from surrogate pair)
 	resultStr := string(result)
 	aIdx := strings.Index(resultStr, `"a":`)
 	abIdx := strings.Index(resultStr, `"ab":`)
@@ -331,20 +300,17 @@ func TestJCSAstralPlane(t *testing.T) {
 	}
 }
 
-// TestJCSGoldenVectors tests against RFC 8785 example outputs
 func TestJCSGoldenVectors(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    interface{}
 		expected string
 	}{
-		// basic object key ordering
 		{
 			name:     "key_ordering",
 			input:    map[string]interface{}{"b": "2", "a": "1"},
 			expected: `{"a":"1","b":"2"}`,
 		},
-		// number formatting
 		{
 			name:     "integer",
 			input:    map[string]interface{}{"n": float64(42)},
@@ -360,7 +326,6 @@ func TestJCSGoldenVectors(t *testing.T) {
 			input:    map[string]interface{}{"n": float64(3.14159)},
 			expected: `{"n":3.14159}`,
 		},
-		// empty structures
 		{
 			name:     "empty_object",
 			input:    map[string]interface{}{},
@@ -371,7 +336,6 @@ func TestJCSGoldenVectors(t *testing.T) {
 			input:    map[string]interface{}{"arr": []interface{}{}},
 			expected: `{"arr":[]}`,
 		},
-		// nested structures
 		{
 			name: "nested",
 			input: map[string]interface{}{
@@ -380,7 +344,6 @@ func TestJCSGoldenVectors(t *testing.T) {
 			},
 			expected: `{"a":"top","b":{"a":"first","z":"last"}}`,
 		},
-		// boolean and null
 		{
 			name:     "booleans",
 			input:    map[string]interface{}{"t": true, "f": false},
@@ -391,7 +354,6 @@ func TestJCSGoldenVectors(t *testing.T) {
 			input:    map[string]interface{}{"n": nil},
 			expected: `{"n":null}`,
 		},
-		// string escaping
 		{
 			name:     "control_chars",
 			input:    map[string]interface{}{"s": "line1\nline2\ttab"},
@@ -412,7 +374,6 @@ func TestJCSGoldenVectors(t *testing.T) {
 	}
 }
 
-// TestJCSV1V2Determinism verifies both versions are deterministic
 func TestJCSV1V2Determinism(t *testing.T) {
 	input := map[string]interface{}{
 		"tools": map[string]interface{}{
@@ -422,7 +383,6 @@ func TestJCSV1V2Determinism(t *testing.T) {
 		"version": "1.0",
 	}
 
-	// run v1 multiple times
 	v1Results := make([]string, 5)
 	for i := 0; i < 5; i++ {
 		res, err := CanonicalizeJSONv1(input)
@@ -437,7 +397,6 @@ func TestJCSV1V2Determinism(t *testing.T) {
 		}
 	}
 
-	// run v2 multiple times
 	v2Results := make([]string, 5)
 	for i := 0; i < 5; i++ {
 		res, err := CanonicalizeJSONv2(input)
@@ -453,13 +412,11 @@ func TestJCSV1V2Determinism(t *testing.T) {
 	}
 }
 
-// TestCanonVectors validates output against testdata/canon_vectors
 func TestCanonVectors(t *testing.T) {
 	inputPath := "../../testdata/canon_vectors/input.json"
 	v1Path := "../../testdata/canon_vectors/canon_v1.json"
 	v2Path := "../../testdata/canon_vectors/canon_v2.json"
 
-	// read input
 	inputData, err := os.ReadFile(inputPath)
 	if err != nil {
 		t.Skipf("test vectors not found: %v", err)
@@ -472,7 +429,6 @@ func TestCanonVectors(t *testing.T) {
 		t.Fatalf("parse input: %v", err)
 	}
 
-	// test v1
 	v1Expected, err := os.ReadFile(v1Path)
 	if err != nil {
 		t.Fatalf("read v1 vector: %v", err)
@@ -487,7 +443,6 @@ func TestCanonVectors(t *testing.T) {
 		t.Errorf("v1 mismatch:\nexpected: %s\ngot:      %s", v1Expected, v1Result)
 	}
 
-	// test v2
 	v2Expected, err := os.ReadFile(v2Path)
 	if err != nil {
 		t.Fatalf("read v2 vector: %v", err)

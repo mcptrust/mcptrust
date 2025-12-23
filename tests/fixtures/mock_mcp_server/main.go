@@ -1,5 +1,3 @@
-// Mock MCP Server
-// Build: go build -o mock_mcp_server ./tests/fixtures/mock_mcp_server
 package main
 
 import (
@@ -9,7 +7,6 @@ import (
 	"os"
 )
 
-// jsonrpc types
 type JSONRPCRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      interface{}     `json:"id"`
@@ -29,7 +26,6 @@ type RPCError struct {
 	Message string `json:"message"`
 }
 
-// mcp types
 type InitializeResult struct {
 	ProtocolVersion string       `json:"protocolVersion"`
 	Capabilities    Capabilities `json:"capabilities"`
@@ -66,7 +62,33 @@ type Property struct {
 	Description string `json:"description,omitempty"`
 }
 
-// mock tools
+type Prompt struct {
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	Arguments   []PromptArgument `json:"arguments,omitempty"`
+}
+
+type PromptArgument struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+}
+
+type PromptsListResult struct {
+	Prompts []Prompt `json:"prompts"`
+}
+
+type ResourceTemplate struct {
+	URITemplate string `json:"uriTemplate"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	MimeType    string `json:"mimeType,omitempty"`
+}
+
+type ResourceTemplatesListResult struct {
+	ResourceTemplates []ResourceTemplate `json:"resourceTemplates"`
+}
+
 var mockTools = []Tool{
 	{
 		Name:        "read_file",
@@ -116,6 +138,29 @@ var mockTools = []Tool{
 	},
 }
 
+var mockPrompts = []Prompt{
+	{
+		Name:        "code_review",
+		Description: "Analyze code quality and suggest improvements",
+		Arguments: []PromptArgument{
+			{Name: "code", Description: "Code to review", Required: true},
+		},
+	},
+	{
+		Name:        "summarize",
+		Description: "Summarize the given text",
+	},
+}
+
+var mockResourceTemplates = []ResourceTemplate{
+	{
+		URITemplate: "file:///{path}",
+		Name:        "Project Files",
+		Description: "Access files in the project directory",
+		MimeType:    "application/octet-stream",
+	},
+}
+
 func handleRequest(req JSONRPCRequest) JSONRPCResponse {
 	switch req.Method {
 	case "initialize":
@@ -144,6 +189,45 @@ func handleRequest(req JSONRPCRequest) JSONRPCResponse {
 			ID:      req.ID,
 			Result: ToolsListResult{
 				Tools: mockTools,
+			},
+		}
+
+	case "resources/list":
+		// Return empty list (no static resources)
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Result: map[string]interface{}{
+				"resources": []interface{}{},
+			},
+		}
+
+	case "prompts/list":
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Result: PromptsListResult{
+				Prompts: mockPrompts,
+			},
+		}
+
+	case "resources/templates/list":
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Result: ResourceTemplatesListResult{
+				ResourceTemplates: mockResourceTemplates,
+			},
+		}
+
+	// forbidden in scan path
+	case "resources/read", "prompts/get":
+		return JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Error: &RPCError{
+				Code:    -32600,
+				Message: fmt.Sprintf("GUARDRAIL VIOLATION: %s is forbidden in scan path", req.Method),
 			},
 		}
 

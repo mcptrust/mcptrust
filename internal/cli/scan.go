@@ -8,26 +8,28 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mcptrust/mcptrust/internal/observability"
+	"github.com/mcptrust/mcptrust/internal/observability/logging"
+	otelobs "github.com/mcptrust/mcptrust/internal/observability/otel"
 	"github.com/mcptrust/mcptrust/internal/scanner"
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
 	defaultTimeout = 10 * time.Second
 )
 
-// scanCmd represents the scan command
+// scanCmd definition
 var scanCmd = &cobra.Command{
 	Use:   "scan -- <command>",
-	Short: "Scan an MCP server for security risks",
-	Long: `Scan connects to an MCP server, interrogates it for capabilities,
-and outputs a security report in JSON format.
-
-The command to start the MCP server should be provided after '--'.
+	Short: "Scan MCP server risks",
+	Long: `Connects to server, interrogates capabilities, outputs JSON report.
 
 Example:
-  mcptrust scan -- "npx -y @modelcontextprotocol/server-filesystem /tmp"
-  mcptrust scan -- "python mcp_server.py"`,
+  mcptrust scan -- "npx -y @modelcontextprotocol/server-filesystem /tmp"`,
 	RunE: runScan,
 }
 
@@ -46,19 +48,55 @@ func GetScanCmd() *cobra.Command {
 	return scanCmd
 }
 
-func runScan(cmd *cobra.Command, args []string) error {
+func runScan(cmd *cobra.Command, args []string) (err error) {
 	// command after '--'
 	command := extractCommand(args)
 	if command == "" {
 		return fmt.Errorf("no MCP server command provided. Usage: mcptrust scan -- <command>")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutFlag)
+	// Get logger
+	ctx := cmd.Context()
+	log := logging.From(ctx)
+	start := time.Now()
+
+	// Start OTel span if enabled (before log.Event so trace_id is available)
+	if h := otelobs.From(ctx); h != nil {
+		var span trace.Span
+		ctx, span = h.Tracer.Start(ctx, "mcptrust.scan",
+			trace.WithAttributes(
+				attribute.String("mcptrust.op_id", observability.OpID(ctx)),
+				attribute.String("mcptrust.command", "scan"),
+			))
+		defer func() {
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "failed")
+			} else {
+				span.SetStatus(codes.Ok, "success")
+			}
+			span.End()
+		}()
+	}
+
+	// Emit start event (after span so trace_id is in context)
+	log.Event(ctx, "scan.start", nil)
+
+	var resultStatus string
+	defer func() {
+		log.Event(ctx, "scan.complete", map[string]any{
+			"duration_ms": time.Since(start).Milliseconds(),
+			"result":      resultStatus,
+		})
+	}()
+
+	ctx, cancel := context.WithTimeout(ctx, timeoutFlag)
 	defer cancel()
 
-	report, err := scanner.Scan(ctx, command, timeoutFlag)
-	if err != nil {
-		return fmt.Errorf("scan failed: %w", err)
+	report, scanErr := scanner.Scan(ctx, command, timeoutFlag)
+	if scanErr != nil {
+		resultStatus = "fail"
+		return fmt.Errorf("scan failed: %w", scanErr)
 	}
 
 	// dump json
@@ -69,14 +107,16 @@ func runScan(cmd *cobra.Command, args []string) error {
 		output, err = json.Marshal(report)
 	}
 	if err != nil {
+		resultStatus = "fail"
 		return fmt.Errorf("failed to marshal report: %w", err)
 	}
 
 	fmt.Println(string(output))
+	resultStatus = "success"
 	return nil
 }
 
-// extractCommand handles the double dash args dance
+// extractCommand helper
 func extractCommand(args []string) string {
 	if len(args) == 0 {
 		// Check if command comes from os.Args

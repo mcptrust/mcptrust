@@ -17,7 +17,7 @@ func TestWriteSignature(t *testing.T) {
 }
 
 func TestReadSignature_NewFormat(t *testing.T) {
-	// new format with header
+	// v2 (json header)
 	data := []byte("{\"canon_version\":\"v2\"}\nabcdef1234567890")
 
 	env, err := ReadSignature(data)
@@ -37,7 +37,7 @@ func TestReadSignature_NewFormat(t *testing.T) {
 }
 
 func TestReadSignature_LegacyFormat(t *testing.T) {
-	// legacy format: raw hex only
+	// legacy (raw hex)
 	data := []byte("deadbeef12345678")
 
 	env, err := ReadSignature(data)
@@ -96,7 +96,7 @@ func TestReadSignature_InvalidHeader(t *testing.T) {
 	}
 }
 
-// === Sigstore v3 format tests ===
+// Sigstore v3 format tests
 
 func TestWriteSigstoreSignature(t *testing.T) {
 	bundle := []byte(`{"test":"bundle","rekorBundle":{"signedEntryTimestamp":"abc"}}`)
@@ -218,8 +218,7 @@ func TestIsSigstore(t *testing.T) {
 	}
 }
 
-// === Patch #6: canon_version enforcement tests ===
-
+// Patch #6: canon_version required
 func TestWriteSigstoreSignature_RequiresCanonVersion(t *testing.T) {
 	bundle := []byte(`{"test":"bundle"}`)
 

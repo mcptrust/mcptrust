@@ -1,16 +1,63 @@
 name: "Strict Production Policy"
+# Mode: strict - any failure causes the check to fail
+# Use this in production CI/CD pipelines
+
 rules:
-  # low risk only
-  - name: "Low Risk Only"
-    expr: "input.tools.all(t, t.risk_level == 'LOW')"
-    failure_msg: "Only LOW risk tools are permitted in production."
+  # Artifact must be pinned with integrity hash
+  - name: "artifact_pinned_required"
+    expr: 'has(input.artifact) && input.artifact.integrity != ""'
+    failure_msg: "✗ Artifact MUST be pinned with integrity hash — run 'mcptrust lock --pin'"
+    severity: error
+    control_refs:
+      - "NIST AI RMF: GOVERN 1.1"
+      - "SOC2: CC7.2"
+      - "ISO/IEC 42001: 8.2"
+    evidence:
+      - "Signed mcp-lock.json with integrity hash"
+      - "mcptrust receipt.json audit trail"
+    evidence_commands:
+      - "mcptrust verify --lockfile mcp-lock.json"
+      - "mcptrust artifact verify --deep mcp-lock.json"
 
-  # approved descriptions
-  - name: "Approved Descriptions"
-    expr: "input.tools.all(t, t.description.startsWith('[SAFE]'))"
-    failure_msg: "All tool descriptions must start with [SAFE] tag."
+  # Provenance must be verified
+  - name: "provenance_required"
+    expr: 'has(input.artifact) && has(input.artifact.provenance) && input.artifact.provenance.verified == true'
+    failure_msg: "✗ Provenance attestation MUST be verified"
+    severity: error
+    control_refs:
+      - "NIST AI RMF: MAP 1.1"
+      - "SLSA: Build L3"
+      - "EU AI Act: Article 11"
+    evidence:
+      - "SLSA provenance attestation verified via cosign"
+      - "Build provenance in mcp-lock.json"
+    evidence_commands:
+      - "mcptrust lock --pin --verify-provenance -- <server command>"
+      - "mcptrust artifact provenance mcp-lock.json"
 
-  # complexity limit (< 3 args)
-  - name: "Simple Tools Only"
-    expr: "input.tools.all(t, size(t.inputSchema.properties) <= 3)"
-    failure_msg: "Tools with more than 3 arguments are too complex."
+  # No high-risk tools allowed
+  - name: "no_high_risk_tools"
+    expr: '!input.tools.exists(t, t.risk_level == "HIGH")'
+    failure_msg: "✗ High-risk tools are not permitted in production"
+    severity: error
+    control_refs:
+      - "NIST AI RMF: MEASURE 2.3"
+      - "ISO/IEC 42001: 9.2"
+    evidence:
+      - "mcptrust scan output with risk classification"
+      - "Policy check pass/fail result"
+    evidence_commands:
+      - "mcptrust scan -- <server command>"
+      - "mcptrust policy check --preset strict --lockfile mcp-lock.json -- <server command>"
+
+  # Server must expose at least one tool
+  - name: "tools_exist"
+    expr: "size(input.tools) > 0"
+    failure_msg: "✗ Server must expose at least one tool"
+    severity: error
+    control_refs:
+      - "NIST AI RMF: GOVERN 2.1"
+    evidence:
+      - "mcptrust scan output listing tools"
+    evidence_commands:
+      - "mcptrust scan -- <server command>"

@@ -10,12 +10,12 @@ import (
 	"strings"
 )
 
-// CommandRunner abstracts exec for testing
+// CommandRunner interface
 type CommandRunner interface {
 	Run(ctx context.Context, name string, args []string, env []string) (stdout, stderr []byte, err error)
 }
 
-// DefaultRunner captures output (CI)
+// DefaultRunner captures output
 type DefaultRunner struct{}
 
 func (r *DefaultRunner) Run(ctx context.Context, name string, args []string, env []string) ([]byte, []byte, error) {
@@ -30,8 +30,7 @@ func (r *DefaultRunner) Run(ctx context.Context, name string, args []string, env
 	return stdout.Bytes(), stderr.Bytes(), err
 }
 
-// InteractiveRunner connects stdio for browser flow
-// use for local interactive (prompts visible)
+// InteractiveRunner for prompts
 type InteractiveRunner struct{}
 
 func (r *InteractiveRunner) Run(ctx context.Context, name string, args []string, env []string) ([]byte, []byte, error) {
@@ -46,7 +45,7 @@ func (r *InteractiveRunner) Run(ctx context.Context, name string, args []string,
 	return nil, nil, err
 }
 
-// IsCI detects CI env
+// IsCI detector
 func IsCI() bool {
 	// CI=true is set by GitHub Actions, GitLab CI, Travis, CircleCI, etc.
 	if os.Getenv("CI") == "true" || os.Getenv("CI") == "1" {
@@ -59,7 +58,7 @@ func IsCI() bool {
 	return false
 }
 
-// IsInteractive checks if we can prompt
+// IsInteractive check
 func IsInteractive() bool {
 	if IsCI() {
 		return false
@@ -72,7 +71,7 @@ func IsInteractive() bool {
 	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
-// GetRunner returns appropriate runner (CI vs local)
+// GetRunner factory
 func GetRunner() CommandRunner {
 	if IsInteractive() {
 		return &InteractiveRunner{}
@@ -80,7 +79,7 @@ func GetRunner() CommandRunner {
 	return &DefaultRunner{}
 }
 
-// VerifyResult verification outcome
+// VerifyResult struct
 type VerifyResult struct {
 	Valid    bool
 	Issuer   string
@@ -88,8 +87,7 @@ type VerifyResult struct {
 	Message  string
 }
 
-// SignBundle signs artifact using keyless OIDC (cosign sign-blob)
-// returns bundle json
+// SignBundle cosign sign-blob
 func SignBundle(ctx context.Context, artifactPath string, runner CommandRunner) ([]byte, error) {
 	if runner == nil {
 		runner = &DefaultRunner{}
@@ -143,7 +141,7 @@ func SignBundle(ctx context.Context, artifactPath string, runner CommandRunner) 
 	return bundleJSON, nil
 }
 
-// VerifyBundle verifies artifact against sigstore bundle
+// VerifyBundle cosign verify-blob
 func VerifyBundle(ctx context.Context, artifactPath string, bundleJSON []byte, issuer, identity, identityRegexp string, runner CommandRunner) (*VerifyResult, error) {
 	if runner == nil {
 		runner = &DefaultRunner{}
@@ -212,7 +210,7 @@ func VerifyBundle(ctx context.Context, artifactPath string, bundleJSON []byte, i
 	}, nil
 }
 
-// checkCosignExists ensures cosign is in PATH
+// checkCosignExists check
 func checkCosignExists(ctx context.Context, runner CommandRunner) error {
 	_, _, err := runner.Run(ctx, "cosign", []string{"version"}, nil)
 	if err != nil {
@@ -226,10 +224,10 @@ func checkCosignExists(ctx context.Context, runner CommandRunner) error {
 	return nil
 }
 
-// GitHubActionsIssuer is the OIDC issuer for GitHub Actions
+// GitHubActionsIssuer URL
 const GitHubActionsIssuer = "https://token.actions.githubusercontent.com"
 
-// BuildGitHubActionsIdentity constructs expected identity for GA workflow
+// BuildGitHubActionsIdentity helper
 func BuildGitHubActionsIdentity(owner, repo, workflowFile, ref string) string {
 	// Format: https://github.com/<OWNER>/<REPO>/.github/workflows/<WORKFLOW_FILE>@<REF>
 	workflowPath := workflowFile

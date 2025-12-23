@@ -6,10 +6,12 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/mcptrust/mcptrust/internal/bundler"
 	"github.com/mcptrust/mcptrust/internal/crypto"
 	"github.com/mcptrust/mcptrust/internal/models"
+	"github.com/mcptrust/mcptrust/internal/observability/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -27,14 +29,10 @@ var bundleCmd = &cobra.Command{
 // bundleExportCmd
 var bundleExportCmd = &cobra.Command{
 	Use:   "export",
-	Short: "Export security artifacts to a deterministic ZIP file",
-	Long: `Export signed lockfile and artifacts to a reproducible bundle.
-
+	Short: "Export to reproducible ZIP",
+	Long: `Export signed lockfile and artifacts.
 Contents: manifest.json, mcp-lock.json, signatures, policy.
-Deterministic: identical inputs = identical outputs.
-
-Example:
-  mcptrust bundle export --output approval.zip`,
+Deterministic output.`,
 	RunE: runBundleExport,
 }
 
@@ -58,12 +56,28 @@ func GetBundleCmd() *cobra.Command {
 }
 
 func runBundleExport(cmd *cobra.Command, args []string) error {
+	// Get logger and emit start event
+	ctx := cmd.Context()
+	log := logging.From(ctx)
+	start := time.Now()
+	log.Event(ctx, "bundle_export.start", nil)
+
+	var resultStatus string
+	defer func() {
+		log.Event(ctx, "bundle_export.complete", map[string]any{
+			"duration_ms": time.Since(start).Milliseconds(),
+			"result":      resultStatus,
+		})
+	}()
+
 	// check required files
 	if _, err := os.Stat(bundleLockfileFlag); err != nil {
+		resultStatus = "fail"
 		return fmt.Errorf("lockfile not found at %s: you must run 'mcptrust lock' first", bundleLockfileFlag)
 	}
 
 	if _, err := os.Stat(bundleSignatureFlag); err != nil {
+		resultStatus = "fail"
 		return fmt.Errorf("signature not found at %s: you must run 'mcptrust sign' first (cannot bundle unsigned code)", bundleSignatureFlag)
 	}
 
@@ -127,6 +141,7 @@ func runBundleExport(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("  • README.txt (tool manifest)\n")
 
+	resultStatus = "success"
 	return nil
 }
 

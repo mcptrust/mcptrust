@@ -1,0 +1,37 @@
+{
+    "lockfileVersion": "3.0",
+    "server": "filesystem-server",
+    "lockfile": "mcp-lock.json",
+    "summary": {
+        "critical": 2,
+        "moderate": 1,
+        "info": 0,
+        "total": 3
+    },
+    "drift": [
+        {
+            "type": "PROMPT_ADDED",
+            "severity": "CRITICAL",
+            "identifier": "new_prompt",
+            "message": "New prompt added to server"
+        },
+        {
+            "type": "TEMPLATE_CHANGED",
+            "severity": "CRITICAL",
+            "identifier": "file:///{path}",
+            "oldHash": "sha256:1a2b3c4d5e6f7890abcdef",
+            "newHash": "sha256:9c0d1e2f3a4b5678fedcba",
+            "message": "Template hash changed"
+        },
+        {
+            "type": "PROMPT_DESC_CHANGED",
+            "severity": "MODERATE",
+            "identifier": "summarize",
+            "oldHash": "sha256:aabbccdd11223344",
+            "newHash": "sha256:eeff00112233445566",
+            "message": "Description updated"
+        }
+    ],
+    "failOn": "critical",
+    "outcome": "FAIL"
+}
