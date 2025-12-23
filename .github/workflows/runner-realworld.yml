@@ -26,22 +26,22 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.6.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4.6.0
 
       # Pin specific Go version for reproducibility
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.2.0
+      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v5.2.0
         with:
           go-version: '1.21.x'
 
       # Pin specific Node.js version for npm behavior consistency
       - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.2.0
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v4.2.0
         with:
           node-version: '20.10.0'  # LTS version with known npm behavior
 
       # Pin cosign version - update this periodically after testing
       - name: Install cosign
-        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
         with:
           cosign-release: 'v2.4.1'  # Required for verify-blob-attestation features
 
@@ -105,7 +105,7 @@ jobs:
           echo "✓ Baseline policy check succeeded"
 
       - name: Upload lockfile artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4.6.0
         if: always()
         with:
           name: mcp-lock-realworld
